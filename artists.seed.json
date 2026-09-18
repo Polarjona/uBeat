@@ -1,0 +1,90 @@
+[
+  {
+    "id": "111279",
+    "name": "Metallica",
+    "genre": "Thrash Metal",
+    "country": "Los Angeles, USA",
+    "website": "",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/qyuqvy1375623610.jpg"
+  },
+  {
+    "id": "111247",
+    "name": "The Beatles",
+    "genre": "Pop-Rock",
+    "country": "Liverpool, England",
+    "website": "",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/qpvwuv1347996168.jpg"
+  },
+  {
+    "id": "111239",
+    "name": "Coldplay",
+    "genre": "Alternative Rock",
+    "country": "London, England",
+    "website": "",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/uxrqxy1347913147.jpg"
+  },
+  {
+    "id": "119227",
+    "name": "The Rolling Stones",
+    "genre": "Rock",
+    "country": "London, England",
+    "website": "rollingstones.com",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/rputqs1367245834.jpg"
+  },
+  {
+    "id": "111238",
+    "name": "Queen",
+    "genre": "Rock",
+    "country": "London, England",
+    "website": "www.queenonline.com",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/srxwyp1347980615.jpg"
+  },
+  {
+    "id": "111358",
+    "name": "Linkin Park",
+    "genre": "Alternative Rock",
+    "country": "California, USA",
+    "website": "www.linkinpark.com",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/usspxq1347996993.jpg"
+  },
+  {
+    "id": "119231",
+    "name": "AC/DC",
+    "genre": "Hard Rock",
+    "country": "Sydney, Australia",
+    "website": "",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/rryqtt1367245371.jpg"
+  },
+  {
+    "id": "111319",
+    "name": "Nirvana",
+    "genre": "Rock",
+    "country": "Washington, USA",
+    "website": "www.nirvana.com",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/n46y7i1639060786.jpg"
+  },
+  {
+    "id": "111564",
+    "name": "Muse",
+    "genre": "Alternative Rock",
+    "country": "Teignmouth, England",
+    "website": "",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/ywtwsq1357992851.jpg"
+  },
+  {
+    "id": "184610",
+    "name": "Muse",
+    "genre": "",
+    "country": null,
+    "website": null,
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/rybx211781699934.jpg"
+  },
+  {
+    "id": "114415",
+    "name": "Imagine Dragons",
+    "genre": "Indie",
+    "country": "Las Vegas, USA",
+    "website": "www.imaginedragonsmusic.com",
+    "image": "https://r2.theaudiodb.com/images/media/artist/thumb/pofa5b1630699220.jpg"
+  }
+]

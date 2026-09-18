@@ -1,0 +1,10 @@
+# Clave privada de Firebase (NO subir a git)
+firebase-key.json
+# Secreto de reCAPTCHA (NO subir a git)
+secrets.json
+# Node portable local + logs (cada PC usa los suyos)
+node-portable/
+arranque.log
+server-debug.log
+node_modules/
+.env

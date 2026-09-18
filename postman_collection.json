@@ -1,0 +1,139 @@
+{
+  "info": {
+    "name": "Artistas App",
+    "description": "Probar la API: buscar (con autoguardado en Firestore si falta) e importar.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Salud",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/health" }
+    },
+    {
+      "name": "Buscar artista (crea en Firestore si no existe)",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/artists?search=Queen" }
+    },
+    {
+      "name": "Buscar artista nuevo (fuerza autoguardado)",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/artists?search=Rammstein" }
+    },
+    {
+      "name": "Total de artistas en Firestore",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/artists/count" }
+    },
+    {
+      "name": "Todos los artistas",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/artists" }
+    },
+    {
+      "name": "Valores para filtros (países y géneros)",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/artists/filters" }
+    },
+    {
+      "name": "Filtrar por país Y género (AND)",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/artists?genre=Rock&country=London,%20England" }
+    },
+    {
+      "name": "Vistas previas de audio (iTunes, 30 s)",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/artists/preview?artist=Queen" }
+    },
+    {
+      "name": "Rankings (US global / ES España)",
+      "request": { "method": "GET", "url": "http://localhost:8080/api/charts?storefront=ES" }
+    },
+    {
+      "name": "Registro (Firebase REST)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyDNLzGiLPo7_u6yxi9ifqAnMDOVsxBG_IE"
+      }
+    },
+    {
+      "name": "Login (Firebase REST, devuelve idToken)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyDNLzGiLPo7_u6yxi9ifqAnMDOVsxBG_IE"
+      }
+    },
+    {
+      "name": "Mi perfil (Bearer idToken Firebase)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "url": "http://localhost:8080/api/me"
+      }
+    },
+    {
+      "name": "Dar/quitar Me gusta a canción (Bearer)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "body": { "mode": "raw", "raw": "{\n  \"trackId\": \"6792889544\",\n  \"track\": \"Don't Stop Me Now\",\n  \"artist\": \"Queen\",\n  \"previewUrl\": \"https://ejemplo.m4a\"\n}" },
+        "url": "http://localhost:8080/api/song-likes"
+      }
+    },
+    {
+      "name": "Mis canciones favoritas (Bearer)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "url": "http://localhost:8080/api/song-likes"
+      }
+    },
+    {
+      "name": "Email de recuperación (lo envía Firebase)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"requestType\": \"PASSWORD_RESET\",\n  \"email\": \"demo@ejemplo.com\",\n  \"continueUrl\": \"http://localhost:8080/?mode=resetPassword\"\n}" },
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyDNLzGiLPo7_u6yxi9ifqAnMDOVsxBG_IE"
+      }
+    },
+    {
+      "name": "Crear playlist (Bearer)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Rock español\"\n}" },
+        "url": "http://localhost:8080/api/playlists"
+      }
+    },
+    {
+      "name": "Mis playlists (Bearer)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "url": "http://localhost:8080/api/playlists"
+      }
+    },
+    {
+      "name": "Dar/quitar Me gusta a artista (Bearer)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "body": { "mode": "raw", "raw": "{\n  \"artistId\": \"111238\"\n}" },
+        "url": "http://localhost:8080/api/likes"
+      }
+    },
+    {
+      "name": "Importar artista",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Mecano\"\n}" },
+        "url": "http://localhost:8080/api/artists/import"
+      }
+    },
+    {
+      "name": "Rellenar nameLower faltante",
+      "request": {
+        "method": "POST",
+        "url": "http://localhost:8080/api/artists/backfill"
+      }
+    }
+  ]
+}
