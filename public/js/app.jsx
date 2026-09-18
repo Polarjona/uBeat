@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -64,8 +64,8 @@ function App() {
     playing: false,
     loadingPreview: false,
     previewError: "",
-    showTop: false,
     theme: "dark",
+    accent: "#7c6cf0",
     source: "",
     loading: true,
     error: "",
@@ -114,19 +114,6 @@ function App() {
 
   const setQuery = (v) => setState((s) => ({ ...s, query: v }));
 
-  // Botón volver-arriba: aparece tras una distancia considerable de scroll.
-  useEffect(() => {
-    const onScroll = () => {
-      const v = window.scrollY > 600;
-      setState((s) => (s.showTop === v ? s : { ...s, showTop: v }));
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const scrollTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
-
   // Tema claro / oscuro con persistencia.
   useEffect(() => {
     let t = "dark";
@@ -135,7 +122,15 @@ function App() {
     } catch (_) {}
     if (t !== "light") t = "dark";
     document.documentElement.dataset.theme = t;
-    setState((s) => ({ ...s, theme: t }));
+    let a = "#7c6cf0";
+    try {
+      const saved = localStorage.getItem("aa_accent");
+      if (/^#[0-9a-fA-F]{6}$/.test(saved || "")) {
+        a = saved;
+        applyAccent(a);
+      }
+    } catch (_) {}
+    setState((s) => ({ ...s, theme: t, accent: a }));
   }, []);
 
   const toggleTheme = () =>
@@ -147,6 +142,55 @@ function App() {
       document.documentElement.dataset.theme = t;
       return { ...s, theme: t };
     });
+
+  // Color de acento personalizable con persistencia.
+  const shade = (hex, pct) => {
+    const n = hex.replace("#", "");
+    const num = parseInt(
+      n.length === 3 ? n.split("").map((c) => c + c).join("") : n,
+      16
+    );
+    const amt = Math.round(2.55 * pct);
+    const r = Math.min(255, Math.max(0, (num >> 16) + amt));
+    const g = Math.min(255, Math.max(0, ((num >> 8) & 255) + amt));
+    const b = Math.min(255, Math.max(0, (num & 255) + amt));
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  };
+
+  const isLightHex = (hex) => {
+    const n = hex.replace("#", "");
+    const num = parseInt(n.length === 3 ? n.split("").map((c) => c + c).join("") : n, 16);
+    const r = num >> 16;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 >= 0.5;
+  };
+
+  const applyAccent = (hex) => {
+    const root = document.documentElement.style;
+    root.setProperty("--accent", hex);
+    root.setProperty("--accent-hover", shade(hex, 12));
+    root.setProperty("--accent-ink", isLightHex(hex) ? "#14142b" : "#ffffff");
+  };
+
+  const setAccent = (hex) => {
+    try {
+      localStorage.setItem("aa_accent", hex);
+    } catch (_) {}
+    applyAccent(hex);
+    setState((s) => ({ ...s, accent: hex }));
+  };
+
+  const resetAccent = () => {
+    try {
+      localStorage.removeItem("aa_accent");
+    } catch (_) {}
+    const root = document.documentElement.style;
+    root.removeProperty("--accent");
+    root.removeProperty("--accent-hover");
+    root.removeProperty("--accent-ink");
+    setState((s) => ({ ...s, accent: "#7c6cf0" }));
+  };
   const toggleFilters = () =>
     setState((s) => ({ ...s, showFilters: !s.showFilters, showUser: false }));
 
@@ -209,7 +253,7 @@ function App() {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
             </span>
             <span>
-              Artistas App
+              uBeat
               <small>{state.total > 0 ? `${state.total} artistas` : "Catálogo de artistas"}</small>
             </span>
           </div>
@@ -253,9 +297,9 @@ function App() {
             <button
               className="btn ghost"
               type="button"
-              onClick={() => setState((s) => ({ ...s, authModal: true, authError: "" }))}
+              onClick={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
             >
-              Usuarios
+              Log in
             </button>
           )}
           <FilterDropdown
@@ -297,6 +341,21 @@ function App() {
               ctrlRef.current.closeReset();
               setState((s) => ({ ...s, authModal: true, authMode: "login" }));
             }}
+          />
+        ) : state.view === "settings" ? (
+          <SettingsView
+            theme={state.theme}
+            accent={state.accent}
+            onTheme={(t) => {
+              if (t !== state.theme) toggleTheme();
+            }}
+            onAccent={(c) => setAccent(c)}
+            onResetAccent={() => resetAccent()}
+            cookies={state.cookies}
+            onOpenCookies={() => ctrlRef.current.reopenCookies()}
+            user={state.user}
+            onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
+            onLogout={() => ctrlRef.current.logout()}
           />
         ) : state.view === "playlists" ? (
           <section>
@@ -525,24 +584,12 @@ function App() {
 
       <Footer onCookies={() => ctrlRef.current.reopenCookies()} />
 
-      {state.entered && !state.cookies ? (
+      {state.entered && !state.cookies && !state.cookiesDismissed ? (
         <CookieBanner
           onAcceptAll={() => ctrlRef.current.acceptCookies()}
           onSave={(d) => ctrlRef.current.saveCookiePrefs(d)}
           onReject={() => ctrlRef.current.rejectCookies()}
         />
-      ) : null}
-
-      {state.entered ? (
-        <button
-          className={"to-top" + (state.showTop ? " visible" : "")}
-          type="button"
-          aria-label="Volver arriba"
-          title="Volver arriba"
-          onClick={scrollTop}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8l-6 6 1.4 1.4L12 11l4.6 4.4L18 14z" /></svg>
-        </button>
       ) : null}
 
       <SideMenu
@@ -555,6 +602,10 @@ function App() {
         onGo={(v) => ctrlRef.current.go(v)}
         onClose={() => setState((s) => ({ ...s, drawer: false }))}
         onUsers={() => setState((s) => ({ ...s, drawer: false, authModal: true, authError: "" }))}
+        onLogout={() => {
+          ctrlRef.current.logout();
+          setState((s) => ({ ...s, drawer: false }));
+        }}
       />
 
       {state.authModal ? (

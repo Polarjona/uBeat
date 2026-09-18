@@ -526,8 +526,9 @@
 
     async function rejectCookies() {
       // El rechazo NO se guarda: el banner volverá a salir en la próxima visita.
+      // Se oculta en esta sesión para que no parezca que no funciona.
       await applySessionPref(false);
-      setState((s) => ({ ...s, cookies: null, user: null, likeIds: [], songLikeIds: [] }));
+      setState((s) => ({ ...s, cookies: null, cookiesDismissed: true, user: null, likeIds: [], songLikeIds: [] }));
     }
 
     // Reabre el banner (desde el pie de página) para cambiar la elección.
@@ -535,7 +536,7 @@
       try {
         localStorage.removeItem("aa_cookies");
       } catch (_) {}
-      setState((s) => ({ ...s, cookies: null }));
+      setState((s) => ({ ...s, cookies: null, cookiesDismissed: false }));
     }
 
     // ---- Para ti (ponderado) ----

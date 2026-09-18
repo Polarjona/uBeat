@@ -169,7 +169,7 @@ window.ArtistaViews = (function () {
   }
 
   // Menú lateral: Inicio / favoritos / playlists.
-  function SideMenu({ open, view, user, favCount, songFavCount, plCount, onGo, onClose, onUsers }) {
+  function SideMenu({ open, view, user, favCount, songFavCount, plCount, onGo, onClose, onUsers, onLogout }) {
     return (
       <React.Fragment>
         <div className={"drawer-scrim" + (open ? " open" : "")} onClick={onClose} />
@@ -209,9 +209,20 @@ window.ArtistaViews = (function () {
             Playlists
             {user && plCount > 0 ? ` (${plCount})` : ""}
           </button>
+          <button
+            type="button"
+            className={view === "settings" ? "drawer-item active" : "drawer-item"}
+            onClick={() => onGo("settings")}
+          >
+            Ajustes
+          </button>
           <div className="drawer-foot">
             <span>{user ? user.name : "Sin sesión iniciada"}</span>
-            <button type="button" className="link" onClick={onUsers}>Usuarios</button>
+            {user ? (
+              <button type="button" className="link" onClick={onLogout}>Log out</button>
+            ) : (
+              <button type="button" className="link" onClick={onUsers}>Log in</button>
+            )}
           </div>
         </aside>
       </React.Fragment>
@@ -922,7 +933,7 @@ window.ArtistaViews = (function () {
           <div className="landing-logo">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
           </div>
-          <h1>Artistas App</h1>
+          <h1>uBeat</h1>
           <p>Consulta la información esencial de cada artista: país, género e imagen.</p>
           <button className="btn big" onClick={onEnter}>
             Entrar
@@ -1059,12 +1070,120 @@ window.ArtistaViews = (function () {
     );
   }
 
+  // Vista de Ajustes: apariencia, cuenta y cookies.
+  const ACCENT_PRESETS = ["#7c6cf0", "#3fb950", "#d9a441", "#e5635c", "#2aa8a0", "#d66fb0"];
+
+  function SettingsView({
+    theme,
+    accent,
+    onTheme,
+    onAccent,
+    onResetAccent,
+    cookies,
+    onOpenCookies,
+    user,
+    onLogin,
+    onLogout,
+  }) {
+    return (
+      <section>
+        <h2 className="section-title">Ajustes</h2>
+
+        <div className="settings-card">
+          <h3>Color de acento</h3>
+          <p>Personaliza el color principal de la página.</p>
+          <div className="swatches">
+            {ACCENT_PRESETS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={"swatch" + (accent.toLowerCase() === c ? " active" : "")}
+                style={{ background: c }}
+                aria-label={`Color ${c}`}
+                title={c}
+                onClick={() => onAccent(c)}
+              />
+            ))}
+          </div>
+          <div className="custom-color">
+            <input
+              type="color"
+              value={accent}
+              onChange={(e) => onAccent(e.target.value)}
+              aria-label="Color personalizado"
+            />
+            <span>Personalizado ({accent})</span>
+            <button type="button" className="link" onClick={onResetAccent}>
+              Restablecer
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-card">
+          <h3>Apariencia</h3>
+          <p>Tema claro u oscuro.</p>
+          <div className="theme-row">
+            <button
+              type="button"
+              className={"btn ghost" + (theme === "light" ? " active" : "")}
+              onClick={() => onTheme("light")}
+            >
+              Claro
+            </button>
+            <button
+              type="button"
+              className={"btn ghost" + (theme === "dark" ? " active" : "")}
+              onClick={() => onTheme("dark")}
+            >
+              Oscuro
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-card">
+          <h3>Cuenta</h3>
+          {user ? (
+            <div className="settings-user">
+              <span className="avatar">{user.name.charAt(0).toUpperCase()}</span>
+              <div>
+                <strong>{user.name}</strong>
+                <span>{user.email}</span>
+              </div>
+              <button type="button" className="btn ghost" onClick={onLogout}>
+                Salir
+              </button>
+            </div>
+          ) : (
+            <React.Fragment>
+              <p>Sin sesión iniciada.</p>
+              <button type="button" className="btn" onClick={onLogin}>
+                Iniciar sesión
+              </button>
+            </React.Fragment>
+          )}
+        </div>
+
+        <div className="settings-card">
+          <h3>Cookies</h3>
+          <p>
+            {cookies
+              ? `Sesión: ${cookies.session ? "sí" : "no"} · Preferencias: ${cookies.preferences ? "sí" : "no"}`
+              : "Aún no has elegido."}
+          </p>
+          <button type="button" className="btn ghost" onClick={onOpenCookies}>
+            Configurar cookies
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   function Footer({ onCookies }) {
     return (
       <footer className="footer">
         <div className="footer-inner">
           <div>
-            <strong>Artistas App</strong>
+            <strong>uBeat</strong>
             <p>Catálogo de artistas: país, género e imagen.</p>
           </div>
           <div>
@@ -1084,7 +1203,7 @@ window.ArtistaViews = (function () {
           </div>
         </div>
         <div className="footer-bottom">
-          <span>Artistas App · React + MVC · 2026</span>
+          <span>uBeat · React + MVC · 2026</span>
           <button type="button" className="link" onClick={onCookies}>
             Cookies
           </button>
@@ -1093,5 +1212,5 @@ window.ArtistaViews = (function () {
     );
   }
 
-  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner };
+  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView };
 })();

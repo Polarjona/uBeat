@@ -1,4 +1,4 @@
-# Artistas App 🎵
+# uBeat 🎵
 
 Buscador de cantantes estilo Spotify (solo información): **nombre, país, género e imagen**.
 
@@ -19,7 +19,7 @@ Buscador de cantantes estilo Spotify (solo información): **nombre, país, géne
   - `POST /api/artists/import` con `{ "name": "..." }` → importación manual (ideal para **Postman**).
   - `POST /api/artists/backfill` → rellena `nameLower` ausente. Las webs de artistas no se guardan ni se muestran.
   - `GET /api/artists/preview?artist=NOMBRE` → top canciones con vista previa de audio (30 s, iTunes, sin claves). El backend actúa de proxy.
-- **Frontend:** portada con carrusel → **Inicio** con rails “Populares ahora” y “Populares en España” (flechas, máx. 20) + “Todos los artistas” con **scroll infinito** (24 por tanda). **Menú lateral** (Inicio / Mis artistas favoritos / Mis canciones favoritas / Playlists). **Usuarios**: registro e inicio de sesión; corazón en la ficha (se tiñe con animación) y vista de favoritos. **Canciones con Me gusta**, vista propia con reproducción y botón ⋮ para añadirlas a tus **playlists** (crear, abrir, quitar canciones, eliminar). Reproductor in-app en la ficha ampliada y **barra inferior** (imagen, título, controles, volumen, Me gusta) con animación de aparición.
+- **Frontend:** portada con carrusel → **Inicio** con rails “Populares ahora” y “Populares en España” (flechas, máx. 20) + “Todos los artistas” con **scroll infinito** (24 por tanda). **Menú lateral** (Inicio / Mis artistas favoritos / Mis canciones favoritas / Playlists / Ajustes). **Vista Ajustes** con **color de acento personalizable** (6 tonos + libre, con persistencia), tema, cuenta y cookies. **Usuarios**: registro e inicio de sesión; corazón en la ficha (se tiñe con animación) y vista de favoritos. **Canciones con Me gusta**, vista propia con reproducción y botón ⋮ para añadirlas a tus **playlists** (crear, abrir, quitar canciones, eliminar). Reproductor in-app en la ficha ampliada y **barra inferior** (imagen, título, controles, volumen, Me gusta) con animación de aparición.
 
 ## Requisitos (sin permisos de administrador)
 
