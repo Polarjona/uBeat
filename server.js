@@ -810,6 +810,141 @@ app.delete("/api/playlists/:id/songs/:trackId", async (req, res) => {
   }
 });
 
+// ---------- Tracking y recomendaciones ----------
+// Solo usuarios con sesión. Gusto agregado por usuario+artista (acotado).
+const TASTE_COL = "taste";
+const PLAY_W = 1;
+const LIKE_W = 3;
+const SIM_W = 2;
+
+function lastfmKey() {
+  if (process.env.LASTFM_KEY) return process.env.LASTFM_KEY;
+  try {
+    return require(SECRETS_PATH).lastfmKey || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+// Similitud real (Last.fm) si hay clave; si no, mismo género/país.
+async function similarIds(artist, allDocs) {
+  const key = lastfmKey();
+  if (key) {
+    try {
+      const now = Date.now();
+      if (artist.similarAt && now - new Date(artist.similarAt).getTime() < 30 * 86400e3 && Array.isArray(artist.similar))
+        return artist.similar;
+      const r = await fetch(
+        `https://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist=${encodeURIComponent(artist.name)}&api_key=${key}&format=json&limit=12`
+      );
+      const j = await r.json();
+      const names = ((j.similarartists && j.similarartists.artist) || []).map((a) => norm(a.name));
+      const ids = [];
+      for (const n of names) {
+        const hit = allDocs.find((d) => norm(d.name) === n);
+        if (hit && String(hit.id) !== String(artist.id) && !ids.includes(String(hit.id)))
+          ids.push(String(hit.id));
+        if (ids.length >= 12) break;
+      }
+      await db.collection(COLLECTION).doc(String(artist.id)).set(
+        { similar: ids, similarAt: new Date().toISOString() },
+        { merge: true }
+      );
+      return ids;
+    } catch (_) {}
+  }
+  return allDocs
+    .filter(
+      (d) =>
+        String(d.id) !== String(artist.id) &&
+        (norm(d.genre) === norm(artist.genre) || norm(d.country) === norm(artist.country))
+    )
+    .sort((a, b) =>
+      norm(a.genre) === norm(artist.genre) && norm(b.genre) !== norm(artist.genre) ? -1 : 0
+    )
+    .slice(0, 12)
+    .map((d) => String(d.id));
+}
+
+// POST /api/plays {artistId?, trackId?, track?, artist?} -> +1 escucha
+app.post("/api/plays", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const b = req.body || {};
+    let artistId = String(b.artistId || "").trim();
+    if (!artistId && b.artist) {
+      const n = norm(b.artist);
+      const s = await db.collection(COLLECTION).get();
+      const hit = s.docs.find((d) => norm(d.data().name) === n);
+      if (hit) artistId = hit.id;
+    }
+    if (!artistId) return res.json({ ok: true, logged: false });
+    const ref = db.collection(TASTE_COL).doc(`${uid}_${artistId}`);
+    await db.runTransaction(async (tx) => {
+      const cur = await tx.get(ref);
+      const plays = cur.exists ? Number(cur.data().plays || 0) + 1 : 1;
+      tx.set(ref, { uid, artistId, plays, updatedAt: new Date().toISOString() }, { merge: true });
+    });
+    res.json({ ok: true, logged: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/for-you -> rail ponderado con motivos
+app.get("/api/for-you", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const snap = await db.collection(COLLECTION).get();
+    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const byId = new Map(all.map((a) => [String(a.id), a]));
+    const [likesS, tasteS] = await Promise.all([
+      db.collection(LIKES_COL).where("uid", "==", uid).get(),
+      db.collection(TASTE_COL).where("uid", "==", uid).get(),
+    ]);
+    const likedIds = new Set(likesS.docs.map((d) => String(d.data().artistId)));
+    const plays = new Map();
+    tasteS.docs.forEach((d) => plays.set(String(d.data().artistId), Number(d.data().plays || 0)));
+    if (!likedIds.size && !plays.size)
+      return res.json({ ok: true, artists: [], cold: true, source: "taste" });
+
+    const score = new Map();
+    const reason = new Map();
+    const add = (id, pts, why) => {
+      if (!byId.has(String(id))) return;
+      score.set(String(id), (score.get(String(id)) || 0) + pts);
+      if (!reason.has(String(id))) reason.set(String(id), why);
+    };
+    likedIds.forEach((id) => {
+      const a = byId.get(String(id));
+      if (a) add(id, LIKE_W, `Porque te gusta ${a.name}`);
+    });
+    plays.forEach((n, id) => {
+      const a = byId.get(String(id));
+      if (a) add(id, Math.min(n, 10) * PLAY_W, `Porque escuchas a ${a.name}`);
+    });
+    // Expansión por similitud desde las 5 semillas con más señal.
+    const seeds = [...score.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id]) => byId.get(String(id)))
+      .filter(Boolean);
+    for (const s of seeds) {
+      const sims = await similarIds(s, all);
+      sims.forEach((sid, i) => add(sid, SIM_W / (i + 1), `Similar a ${s.name}`));
+    }
+    const ranked = [...score.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([id, pts]) => ({ ...byId.get(String(id)), score: Math.round(pts * 10) / 10, reason: reason.get(String(id)) }));
+    res.json({ ok: true, artists: ranked, cold: false, source: lastfmKey() ? "taste+lastfm" : "taste" });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Vistas previas de audio (30 s, iTunes Search API, sin claves).
 // Sirve de proxy para evitar problemas de CORS desde el navegador.
 app.get("/api/artists/preview", async (req, res) => {

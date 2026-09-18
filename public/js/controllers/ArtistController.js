@@ -132,13 +132,14 @@
       // Firebase avisa solo de los cambios (incluido el arranque).
       model.onSession(async (user, likeIds, songLikeIds) => {
         if (!user) {
-          setState((s) => ({ ...s, user: null, likeIds: [], songLikeIds: [] }));
+          setState((s) => ({ ...s, user: null, likeIds: [], songLikeIds: [], forYou: [] }));
           return;
         }
         setState((s) => ({ ...s, user }));
         if (likeIds && songLikeIds) {
           setState((s) => ({ ...s, likeIds, songLikeIds }));
         }
+        loadForYou();
       });
     }
 
@@ -160,6 +161,7 @@
           authModal: false,
           authMode: "login",
         }));
+        loadForYou();
       } catch (err) {
         setState((s) => ({ ...s, authLoading: false, authError: err.message }));
       }
@@ -182,6 +184,7 @@
           authModal: false,
           authMode: "login",
         }));
+        loadForYou();
       } catch (err) {
         setState((s) => ({ ...s, authLoading: false, authError: err.message }));
       }
@@ -201,6 +204,7 @@
         barQueue: [],
         barIdx: 0,
         barPlaying: false,
+        forYou: [],
         view: "home",
       }));
     }
@@ -224,6 +228,7 @@
             ? [...s.likeIds, artistId]
             : s.likeIds.filter((id) => String(id) !== String(artistId)),
         }));
+        loadForYou();
         return liked;
       } catch (err) {
         setState((s) => ({ ...s, error: err.message }));
@@ -265,6 +270,7 @@
               ? s.songFavorites.filter((t) => String(t.trackId) !== tid)
               : s.songFavorites,
         }));
+        loadForYou();
         return liked;
       } catch (err) {
         setState((s) => ({ ...s, error: err.message }));
@@ -532,6 +538,33 @@
       setState((s) => ({ ...s, cookies: null }));
     }
 
+    // ---- Para ti (ponderado) ----
+    async function loadForYou() {
+      const { user } = getState();
+      if (!user) {
+        setState((s) => ({ ...s, forYou: [] }));
+        return;
+      }
+      setState((s) => ({ ...s, loadingForYou: true }));
+      try {
+        const list = await model.forYou();
+        setState((s) => ({ ...s, forYou: list, loadingForYou: false }));
+      } catch (_) {
+        setState((s) => ({ ...s, loadingForYou: false, forYou: [] }));
+      }
+    }
+
+    // Se llama al empezar cada tema (una vez por pista, no por pausa).
+    async function trackStarted(info) {
+      const { user } = getState();
+      if (!user) return;
+      try {
+        await model.logPlay(info);
+        const list = await model.forYou();
+        setState((s) => ({ ...s, forYou: list }));
+      } catch (_) {}
+    }
+
     // ---- Transición de la portada ----
     function enter() {
       const { entered, leaving } = getState();
@@ -607,6 +640,8 @@
       loadFavorites,
       toggleSongLike,
       loadSongFavorites,
+      loadForYou,
+      trackStarted,
       loadPlaylists,
       createPlaylist,
       deletePlaylist,

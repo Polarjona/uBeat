@@ -130,7 +130,7 @@ window.ArtistaViews = (function () {
   }
 
   // Carrusel horizontal de una fila con flechas de desplazamiento.
-  function Rail({ title, subtitle, artists, loading, onSelect }) {
+  function Rail({ title, subtitle, artists, loading, onSelect, showReason }) {
     const trackRef = useRef(null);
     const scroll = (dir) => {
       const el = trackRef.current;
@@ -157,6 +157,9 @@ window.ArtistaViews = (function () {
               <div className="rail-item" key={String(a.id) + i}>
                 <span className="rail-pos">{a.chartPos || i + 1}</span>
                 <ArtistCard artist={a} onSelect={onSelect} />
+                {showReason && a.reason ? (
+                  <span className="rail-reason">{a.reason}</span>
+                ) : null}
               </div>
             ))}
           </div>
@@ -371,6 +374,7 @@ window.ArtistaViews = (function () {
     onToggleLike,
     songLikeIds,
     onToggleSong,
+    onTrackStart,
   }) {
     const targetRect = () => {
       const w = Math.min(880, window.innerWidth * 0.92);
@@ -418,6 +422,13 @@ window.ArtistaViews = (function () {
           setDur(0);
           setCurTime(0);
           setProgress(0);
+          if (onTrackStart)
+            onTrackStart({
+              artistId: artist.id,
+              trackId: current.trackId,
+              track: current.track,
+              artist: artist.name,
+            });
         }
         a.play().catch(() => {});
       } else {
@@ -726,6 +737,7 @@ window.ArtistaViews = (function () {
     onToggleLike,
     onClose,
     prefsEnabled,
+    onTrackStart,
   }) {
     const track = (queue || [])[idx];
     const audioRef = useRef(null);
@@ -776,6 +788,8 @@ window.ArtistaViews = (function () {
           setDur(0);
           setCurTime(0);
           setProgress(0);
+          if (onTrackStart)
+            onTrackStart({ trackId: track.trackId, track: track.track, artist: track.artist });
         }
         a.play().catch(() => {});
       } else {
@@ -1010,7 +1024,7 @@ window.ArtistaViews = (function () {
     return (
       <div className="cookie-banner" role="dialog" aria-label="Cookies">
         <strong>Cookies y almacenamiento local</strong>
-        <p>Elige qué aceptas. Las necesarias no se pueden desactivar.</p>
+        <p>Elige qué aceptas. Con sesión iniciada registramos tus reproducciones para recomendarte música similar.</p>
         {rows.map((r) => (
           <div className="cookie-row" key={r.k}>
             <div>

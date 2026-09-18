@@ -290,6 +290,22 @@
       await handle(res);
     },
 
+    // ---- Tracking y Para ti (solo con sesión) ----
+    async logPlay(info) {
+      const res = await fetch("/api/plays", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify(info || {}),
+      });
+      await handle(res);
+    },
+
+    async forYou() {
+      const res = await fetch("/api/for-you", { headers: (await this.authHeaders()) });
+      const data = await handle(res);
+      return data.artists || [];
+    },
+
     // ---- Rankings ----
     async charts(storefront) {
       const res = await fetch(`/api/charts?storefront=${storefront}`);

@@ -53,6 +53,8 @@ function App() {
     chartsSpain: [],
     loadingCharts: true,
     chartsError: "",
+    forYou: [],
+    loadingForYou: false,
     entered: false,
     leaving: false,
     detail: null,
@@ -455,6 +457,16 @@ function App() {
           <React.Fragment>
             {showRails ? (
               <React.Fragment>
+                {state.user && (state.forYou.length > 0 || state.loadingForYou) ? (
+                  <Rail
+                    title="Para ti"
+                    subtitle="Ponderado con tus Me gusta y escuchas"
+                    artists={state.forYou}
+                    loading={state.loadingForYou}
+                    onSelect={openDetail}
+                    showReason
+                  />
+                ) : null}
                 <Rail
                   title="Populares ahora"
                   subtitle="Tendencias globales · iTunes"
@@ -577,6 +589,7 @@ function App() {
           onToggleLike={() => ctrlRef.current.toggleLike(state.detail.artist.id)}
           songLikeIds={state.songLikeIds}
           onToggleSong={(t) => ctrlRef.current.toggleSongLike(t)}
+          onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
         />
       ) : null}
 
@@ -594,6 +607,7 @@ function App() {
           onToggleLike={(t) => ctrlRef.current.toggleSongLike(t)}
           onClose={() => ctrlRef.current.closeBar()}
           prefsEnabled={!!(state.cookies && state.cookies.preferences)}
+          onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
         />
       ) : null}
 

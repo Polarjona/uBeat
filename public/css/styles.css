@@ -681,7 +681,15 @@ code {
 
 .rail-item { position: relative; flex: 0 0 210px; }
 
-.rail-item .card { height: 100%; }
+.rail-reason {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .rail-pos {
   position: absolute;
