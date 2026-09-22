@@ -47,7 +47,7 @@
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyDNLzGiLPo7_u6yxi9ifqAnMDOVsxBG_IE"
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyBaqmO-S7XmvXxmlKY_8rc-NDJeJbMYMXg"
       }
     },
     {
@@ -56,7 +56,7 @@
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyDNLzGiLPo7_u6yxi9ifqAnMDOVsxBG_IE"
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyBaqmO-S7XmvXxmlKY_8rc-NDJeJbMYMXg"
       }
     },
     {
@@ -90,7 +90,24 @@
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"requestType\": \"PASSWORD_RESET\",\n  \"email\": \"demo@ejemplo.com\",\n  \"continueUrl\": \"http://localhost:8080/?mode=resetPassword\"\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyDNLzGiLPo7_u6yxi9ifqAnMDOVsxBG_IE"
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyBaqmO-S7XmvXxmlKY_8rc-NDJeJbMYMXg"
+      }
+    },
+    {
+      "name": "Loguear escucha (Bearer)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "body": { "mode": "raw", "raw": "{\n  \"artistId\": \"111238\"\n}" },
+        "url": "http://localhost:8080/api/plays"
+      }
+    },
+    {
+      "name": "Para ti (Bearer)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "url": "http://localhost:8080/api/for-you"
       }
     },
     {
