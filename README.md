@@ -8,14 +8,15 @@ Buscador de cantantes estilo Spotify (solo información): **nombre, país, géne
   - `public/js/controllers/ArtistController.js` → **Controlador** (orquesta Modelo ↔ Vista)
   - `public/js/app.jsx` → arranque
 - **Backend:** Node + Express + `firebase-admin`
+  - `GET /api/health` → estado del servidor (Firestore activo, colección).
   - `GET /api/artists?search=NOMBRE` → busca en **toda** la colección **Firestore** (`artists`); si no existe, lo trae de **TheAudioDB** y lo **guarda automáticamente** en Firestore.
   - `GET /api/artists` → catálogo paginado (`?limit=&offset=` para el scroll infinito) y filtros AND (`?country=&genre=`). `GET /api/artists/filters` → valores únicos. `GET /api/artists/count` → total.
   - `GET /api/charts?storefront=US|ES` → top 20 del ranking iTunes (global / oyentes españoles); auto-importa los que falten. Caché de 1 h.
   - `GET /api/me` → perfil del usuario según su ID token de Firebase (`Authorization: Bearer IDTOKEN`).
-  - **Usuarios con Firebase Authentication**: registro/inicio en el cliente (SDK), recuperación con **enlace por email enviado por Firebase que aterriza en la app** (`/?mode=resetPassword`, formulario propio con verificación del código). **Login protegido con reCAPTCHA v3 invisible** (solo pestaña de login; `secrets.json` + clave de sitio en el Modelo). El backend solo verifica el ID token. Las cuentas del sistema anterior no migran (contraseñas incompatibles): hay que registrarse de nuevo una vez.
-  - `POST /api/likes {artistId}` (alterna), `GET /api/likes`, `GET /api/likes/ids` (con `Authorization: Bearer TOKEN`).
+  - **Usuarios con Firebase Authentication**: registro/inicio en el cliente (SDK), recuperación con **enlace por email enviado por Firebase que aterriza en la app** (`/?mode=resetPassword`, formulario propio con verificación del código). **Login protegido con reCAPTCHA v3 invisible** (solo pestaña de login; `secrets.json` + clave de sitio en el Modelo). `POST /api/auth/captcha {token}` valida el token de reCAPTCHA (score ≥0.5, acción "login"). El backend solo verifica el ID token. Las cuentas del sistema anterior no migran (contraseñas incompatibles): hay que registrarse de nuevo una vez.
+  - `POST /api/likes {artistId}` (alterna), `GET /api/likes`, `GET /api/likes/ids`, `GET /api/artists/:id/likes` (contador público) (con `Authorization: Bearer TOKEN`).
   - `POST /api/song-likes` (alterna, con snapshot de la canción), `GET /api/song-likes`, `GET /api/song-likes/ids` (Bearer).
-  - Playlists: `POST /api/playlists {name}`, `GET /api/playlists` (con conteo), `DELETE /api/playlists/:id`, `GET|POST /api/playlists/:id/songs`, `DELETE /api/playlists/:id/songs/:trackId` (Bearer, solo el dueño, máx. 200 por playlist).
+  - Playlists: `POST /api/playlists {name}`, `GET /api/playlists` (con conteo y portada), `DELETE /api/playlists/:id`, `GET|POST /api/playlists/:id/songs`, `DELETE /api/playlists/:id/songs/:trackId` (Bearer, solo el dueño, máx. 200 por playlist).
   - Tracking y Para ti (solo con sesión): `POST /api/plays {artistId|artist, trackId?, track?}` suma escuchas agregadas por usuario+artista; `GET /api/for-you` devuelve el rail ponderado (Me gusta ×3, escuchas ×1 topadas a 10, similitud ×2 decreciente) con el motivo de cada artista. Similitud real con Last.fm si hay clave (`secrets.json` → `{"lastfmKey": "..."}` o env `LASTFM_KEY`, clave gratis en last.fm/api); sin clave usa género/país.
   - Social: `POST /api/friends/request {email}`, `POST /api/friends/respond {from, accept}`, `DELETE /api/friends/:uid`, `GET /api/friends`, `GET /api/friends/:uid/profile` (solo amigos), `GET /api/friends/activity` (rail social, máx. 20).
   - `POST /api/artists/import` con `{ "name": "..." }` → importación manual (ideal para **Postman**).
