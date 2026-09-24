@@ -945,6 +945,211 @@ app.get("/api/for-you", async (req, res) => {
   }
 });
 
+// ---------- Social: amistades ----------
+// friendships: doc id "uidA_uidB" ordenado; {a, b, from, status, createdAt}
+const FRIENDS_COL = "friendships";
+
+function pairId(x, y) {
+  return [String(x), String(y)].sort().join("_");
+}
+
+async function friendStatus(uid, other) {
+  const d = await db.collection(FRIENDS_COL).doc(pairId(uid, other)).get();
+  return d.exists ? d.data() : null;
+}
+
+// Solicitud por email (se resuelve a uid de Firebase Auth).
+app.post("/api/friends/request", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const email = String(req.body.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ ok: false, error: "Falta el email." });
+    let target;
+    try {
+      target = await getAuth().getUserByEmail(email);
+    } catch (_) {
+      return res.status(404).json({ ok: false, error: "No hay ningún usuario con ese email." });
+    }
+    if (target.uid === uid)
+      return res.status(400).json({ ok: false, error: "No puedes añadirte a ti mismo." });
+    const cur = await friendStatus(uid, target.uid);
+    if (cur)
+      return res.status(409).json({
+        ok: false,
+        error: cur.status === "accepted" ? "Ya sois amigos." : "Solicitud ya enviada.",
+      });
+    await db.collection(FRIENDS_COL).doc(pairId(uid, target.uid)).set({
+      a: [uid, target.uid].sort()[0],
+      b: [uid, target.uid].sort()[1],
+      from: uid,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Aceptar (accept:true) o rechazar solicitud.
+app.post("/api/friends/respond", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const from = String(req.body.from || "");
+    const ref = db.collection(FRIENDS_COL).doc(pairId(uid, from));
+    const d = await ref.get();
+    if (!d.exists || d.data().status !== "pending" || d.data().from !== from || (d.data().a !== uid && d.data().b !== uid))
+      return res.status(404).json({ ok: false, error: "Solicitud no encontrada." });
+    if (req.body.accept) {
+      await ref.set({ status: "accepted", respondedAt: new Date().toISOString() }, { merge: true });
+      return res.json({ ok: true, accepted: true });
+    }
+    await ref.delete();
+    res.json({ ok: true, accepted: false });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Eliminar amistad.
+app.delete("/api/friends/:uid", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    await db.collection(FRIENDS_COL).doc(pairId(uid, req.params.uid)).delete();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Amigos + solicitudes.
+app.get("/api/friends", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const s1 = await db.collection(FRIENDS_COL).where("a", "==", uid).get();
+    const s2 = await db.collection(FRIENDS_COL).where("b", "==", uid).get();
+    const all = [...s1.docs, ...s2.docs].map((d) => d.data());
+    const otherOf = (f) => (f.a === uid ? f.b : f.a);
+    const friends = all.filter((f) => f.status === "accepted").map(otherOf);
+    const pendingIn = all.filter((f) => f.status === "pending" && f.from !== uid).map((f) => f.from);
+    const pendingOut = all.filter((f) => f.status === "pending" && f.from === uid).map(otherOf);
+    const need = [...new Set([...friends, ...pendingIn, ...pendingOut])];
+    const names = {};
+    for (let i = 0; i < need.length; i += 90) {
+      const r = await getAuth().getUsers(need.slice(i, i + 90).map((x) => ({ uid: x })));
+      r.users.forEach((u) =>
+        names[u.uid] = {
+          uid: u.uid,
+          name: u.displayName || String(u.email || "").split("@")[0],
+          email: u.email || "",
+        }
+      );
+    }
+    const pick = (arr) => arr.map((id) => names[id] || { uid: id, name: "Usuario", email: "" });
+    res.json({ ok: true, friends: pick(friends), pendingIn: pick(pendingIn), pendingOut: pick(pendingOut) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Perfil (amigos aceptados, o uno mismo).
+app.get("/api/friends/:uid/profile", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    if (String(req.params.uid) !== String(uid)) {
+      const f = await friendStatus(uid, req.params.uid);
+      if (!f || f.status !== "accepted")
+        return res.status(403).json({ ok: false, error: "No sois amigos." });
+    }
+    const other = req.params.uid;
+    const [la, ls, ts] = await Promise.all([
+      db.collection(LIKES_COL).where("uid", "==", other).get(),
+      db.collection(SONGLIKES_COL).where("uid", "==", other).get(),
+      db.collection(TASTE_COL).where("uid", "==", other).get(),
+    ]);
+    let who = { uid: other, name: "Usuario", email: "" };
+    try {
+      const u = await getAuth().getUser(other);
+      who = { uid: other, name: u.displayName || String(u.email || "").split("@")[0], email: u.email || "" };
+    } catch (_) {}
+    const byTime = (a, b) =>
+      String(b.createdAt || b.updatedAt || "").localeCompare(String(a.createdAt || a.updatedAt || ""));
+    const artists = la.docs.map((d) => ({ id: d.data().artistId, ...d.data() })).sort(byTime);
+    const songs = ls.docs.map((d) => ({ id: d.data().trackId, ...d.data() })).sort(byTime);
+    const tops = ts.docs
+      .map((d) => ({ artistId: String(d.data().artistId), plays: Number(d.data().plays || 0) }))
+      .sort((a, b) => b.plays - a.plays)
+      .slice(0, 5);
+    const snap = await db.collection(COLLECTION).get();
+    const byId = new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+    res.json({
+      ok: true,
+      user: who,
+      artists,
+      songs,
+      top: tops.map((t) => ({ ...(byId.get(t.artistId) || { id: t.artistId }), plays: t.plays })),
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Actividad reciente de amigos para el rail social.
+app.get("/api/friends/activity", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const s1 = await db.collection(FRIENDS_COL).where("a", "==", uid).get();
+    const s2 = await db.collection(FRIENDS_COL).where("b", "==", uid).get();
+    const friends = [...s1.docs, ...s2.docs]
+      .map((d) => d.data())
+      .filter((f) => f.status === "accepted")
+      .map((f) => (f.a === uid ? f.b : f.a))
+      .slice(0, 20);
+    if (!friends.length) return res.json({ ok: true, items: [] });
+    const names = {};
+    const r = await getAuth().getUsers(friends.map((x) => ({ uid: x })));
+    r.users.forEach((u) => (names[u.uid] = u.displayName || String(u.email || "").split("@")[0]));
+    const snap = await db.collection(COLLECTION).get();
+    const byId = new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+    const items = [];
+    for (const fid of friends) {
+      const fname = names[fid] || "Un amigo";
+      const [la, ls, ts] = await Promise.all([
+        db.collection(LIKES_COL).where("uid", "==", fid).get(),
+        db.collection(SONGLIKES_COL).where("uid", "==", fid).get(),
+        db.collection(TASTE_COL).where("uid", "==", fid).get(),
+      ]);
+      const byTime = (a, b) =>
+        String(b.createdAt || b.updatedAt || "").localeCompare(String(a.createdAt || a.updatedAt || ""));
+      la.docs.map((d) => d.data()).sort(byTime).slice(0, 3).forEach((v) => {
+        const a = byId.get(String(v.artistId));
+        if (a) items.push({ kind: "artist", at: v.createdAt || "", friend: fname, caption: `Le gusta a ${fname}`, ...a });
+      });
+      ls.docs.map((d) => d.data()).sort(byTime).slice(0, 3).forEach((v) => {
+        items.push({ kind: "song", at: v.createdAt || "", friend: fname, caption: `Le gusta a ${fname}`, ...v });
+      });
+      ts.docs
+        .map((d) => ({ id: String(d.data().artistId), plays: Number(d.data().plays || 0), at: d.data().updatedAt || "" }))
+        .sort((a, b) => b.plays - a.plays)
+        .slice(0, 2)
+        .forEach((t) => {
+          const a = byId.get(t.id);
+          if (a) items.push({ kind: "artist", at: t.at, friend: fname, caption: `En repeat de ${fname}`, ...a });
+        });
+    }
+    items.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+    res.json({ ok: true, items: items.slice(0, 20) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Vistas previas de audio (30 s, iTunes Search API, sin claves).
 // Sirve de proxy para evitar problemas de CORS desde el navegador.
 app.get("/api/artists/preview", async (req, res) => {

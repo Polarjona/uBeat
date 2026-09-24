@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -55,6 +55,16 @@ function App() {
     chartsError: "",
     forYou: [],
     loadingForYou: false,
+    friends: [],
+    pendingIn: [],
+    pendingOut: [],
+    loadingSocial: false,
+    socialError: "",
+    activity: [],
+    loadingActivity: false,
+    friendProfile: null,
+    loadingProfile: false,
+    profileError: "",
     entered: false,
     leaving: false,
     detail: null,
@@ -248,7 +258,15 @@ function App() {
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z" /></svg>
           </button>
-          <div className="logo">
+          <div
+            className="logo clickable"
+            onClick={() => {
+              ctrlRef.current.clearFilters();
+              ctrlRef.current.go("home");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            title="Ir al inicio"
+          >
             <span className="disc">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
             </span>
@@ -483,6 +501,20 @@ function App() {
               />
             )}
           </section>
+        ) : state.view === "friendProfile" ? (
+          <FriendProfile
+            profile={state.friendProfile}
+            loading={state.loadingProfile}
+            error={state.profileError}
+            onOpenArtist={openDetail}
+            onPlaySongs={(list, i) => ctrlRef.current.playSongs(list, i)}
+            currentId={state.barQueue[state.barIdx] && state.barQueue[state.barIdx].trackId}
+            playing={state.barPlaying}
+            likeIds={state.songLikeIds}
+            onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
+            own={!!(state.friendProfile && state.friendProfile.own)}
+            onGoSettings={() => ctrlRef.current.go("settings")}
+          />
         ) : state.view === "favorites" ? (
           <section>
             <h2 className="section-title">Mis artistas favoritos</h2>
@@ -524,6 +556,16 @@ function App() {
                     loading={state.loadingForYou}
                     onSelect={openDetail}
                     showReason
+                  />
+                ) : null}
+                {state.user && (state.activity.length > 0 || state.loadingActivity) ? (
+                  <SocialRail
+                    title="Le gusta a tus amigos"
+                    subtitle="Lo que escuchan y marcan tus amigos"
+                    items={state.activity}
+                    loading={state.loadingActivity}
+                    onOpenArtist={openDetail}
+                    onPlaySong={(sg) => ctrlRef.current.playSongs([sg], 0)}
                   />
                 ) : null}
                 <Rail
@@ -606,6 +648,18 @@ function App() {
           ctrlRef.current.logout();
           setState((s) => ({ ...s, drawer: false }));
         }}
+        onOpenMyProfile={() => ctrlRef.current.openMyProfile()}
+        onGoSettings={() => ctrlRef.current.go("settings")}
+        social={{
+          friends: state.friends,
+          pendingIn: state.pendingIn,
+          pendingOut: state.pendingOut,
+          error: state.socialError,
+        }}
+        onAddFriend={(e) => ctrlRef.current.sendFriendRequest(e)}
+        onRespondFriend={(f, a) => ctrlRef.current.respondFriend(f, a)}
+        onRemoveFriend={(u) => ctrlRef.current.removeFriend(u)}
+        onOpenFriend={(u) => ctrlRef.current.openFriend(u)}
       />
 
       {state.authModal ? (

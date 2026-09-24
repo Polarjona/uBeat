@@ -169,7 +169,17 @@ window.ArtistaViews = (function () {
   }
 
   // Menú lateral: Inicio / favoritos / playlists.
-  function SideMenu({ open, view, user, favCount, songFavCount, plCount, onGo, onClose, onUsers, onLogout }) {
+  function SideMenu({ open, view, user, favCount, songFavCount, plCount, onGo, onClose, onUsers, onLogout, onOpenMyProfile, onGoSettings, social, onAddFriend, onRespondFriend, onRemoveFriend, onOpenFriend }) {
+    const [socialOpen, setSocialOpen] = useState(true);
+    const [friendEmail, setFriendEmail] = useState("");
+    const sendInvite = (e) => {
+      e.preventDefault();
+      if (friendEmail.trim()) {
+        onAddFriend(friendEmail.trim());
+        setFriendEmail("");
+      }
+    };
+    const initials = (n) => String(n || "?").charAt(0).toUpperCase();
     return (
       <React.Fragment>
         <div className={"drawer-scrim" + (open ? " open" : "")} onClick={onClose} />
@@ -178,6 +188,7 @@ window.ArtistaViews = (function () {
             <strong>Menú</strong>
             <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
           </div>
+          <div className="drawer-nav">
           <button
             type="button"
             className={view === "home" ? "drawer-item active" : "drawer-item"}
@@ -209,19 +220,87 @@ window.ArtistaViews = (function () {
             Playlists
             {user && plCount > 0 ? ` (${plCount})` : ""}
           </button>
-          <button
-            type="button"
-            className={view === "settings" ? "drawer-item active" : "drawer-item"}
-            onClick={() => onGo("settings")}
-          >
-            Ajustes
-          </button>
+          </div>
+          <div className="drawer-social">
+            <button
+              type="button"
+              className="drawer-item social-head"
+              onClick={() => setSocialOpen((o) => !o)}
+            >
+              <span>Social{social && social.friends.length > 0 ? ` (${social.friends.length})` : ""}</span>
+              <span>{socialOpen ? "▾" : "▸"}</span>
+            </button>
+            <div className={"social-body" + (socialOpen ? " open" : "")}>
+                {!user ? (
+                  <p className="muted">Inicia sesión para añadir amigos.</p>
+                ) : (
+                  <React.Fragment>
+                    <form className="social-add" onSubmit={sendInvite}>
+                      <input
+                        type="email"
+                        value={friendEmail}
+                        onChange={(e) => setFriendEmail(e.target.value)}
+                        placeholder="Email de tu amigo"
+                        required
+                      />
+                      <button className="btn" type="submit">Añadir</button>
+                    </form>
+                    {social && social.error ? <div className="error sm">{social.error}</div> : null}
+                    {social && social.pendingIn.length > 0 ? (
+                      <React.Fragment>
+                        <p className="social-title">Solicitudes</p>
+                        {social.pendingIn.map((p) => (
+                          <div className="friend-row" key={p.uid}>
+                            <span className="avatar sm">{initials(p.name)}</span>
+                            <span className="fname">{p.name}</span>
+                            <button type="button" className="mini-ok" onClick={() => onRespondFriend(p.uid, true)} aria-label="Aceptar">✓</button>
+                            <button type="button" className="mini-no" onClick={() => onRespondFriend(p.uid, false)} aria-label="Rechazar">✕</button>
+                          </div>
+                        ))}
+                      </React.Fragment>
+                    ) : null}
+                    {social && social.friends.length > 0 ? (
+                      <React.Fragment>
+                        <p className="social-title">Amigos</p>
+                        {social.friends.map((f) => (
+                          <div className="friend-row" key={f.uid}>
+                            <button type="button" className="friend-open" onClick={() => onOpenFriend(f.uid)}>
+                              <span className="avatar sm">{initials(f.name)}</span>
+                              <span className="fname">{f.name}</span>
+                            </button>
+                            <button type="button" className="mini-no" onClick={() => onRemoveFriend(f.uid)} aria-label="Eliminar">✕</button>
+                          </div>
+                        ))}
+                      </React.Fragment>
+                    ) : (
+                      <p className="muted">Aún no tienes amigos. Invita por email.</p>
+                    )}
+                    {social && social.pendingOut.length > 0 ? (
+                      <p className="muted">Pendientes: {social.pendingOut.map((p) => p.name).join(", ")}</p>
+                    ) : null}
+                  </React.Fragment>
+                )}
+              </div>
+          </div>
           <div className="drawer-foot">
-            <span>{user ? user.name : "Sin sesión iniciada"}</span>
             {user ? (
-              <button type="button" className="link" onClick={onLogout}>Log out</button>
+              <React.Fragment>
+                <button type="button" className="user-open" onClick={onOpenMyProfile}>
+                  <span className="avatar sm">{initials(user.name)}</span>
+                  <span className="fname">{user.name}</span>
+                </button>
+                <button type="button" className="icon-btn sm" onClick={onGoSettings} aria-label="Ajustes" title="Ajustes">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.08-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
+                </button>
+              </React.Fragment>
             ) : (
-              <button type="button" className="link" onClick={onUsers}>Log in</button>
+              <React.Fragment>
+                <span>Sin sesión iniciada</span>
+                <button type="button" className="link" onClick={onUsers}>Log in</button>
+                <button type="button" className="icon-btn sm" onClick={onGoSettings} aria-label="Ajustes" title="Ajustes">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.08-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
+                </button>
+              </React.Fragment>
             )}
           </div>
         </aside>
@@ -893,6 +972,115 @@ window.ArtistaViews = (function () {
     );
   }
 
+  // Carril social: artistas y canciones de amigos con su motivo.
+  function SocialRail({ title, subtitle, items, loading, onOpenArtist, onPlaySong }) {
+    const trackRef = useRef(null);
+    const scroll = (dir) => {
+      const el = trackRef.current;
+      if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
+    };
+    if (!loading && (!items || !items.length)) return null;
+    return (
+      <section className="rail">
+        <div className="rail-head">
+          <div>
+            <h2>{title}</h2>
+            {subtitle ? <p>{subtitle}</p> : null}
+          </div>
+          <div className="rail-nav">
+            <button type="button" onClick={() => scroll(-1)} aria-label="Anterior">‹</button>
+            <button type="button" onClick={() => scroll(1)} aria-label="Siguiente">›</button>
+          </div>
+        </div>
+        {loading ? (
+          <div className="loader"><span className="spinner" /> Cargando…</div>
+        ) : (
+          <div className="rail-track" ref={trackRef}>
+            {items.map((it, i) => (
+              <div className="rail-item" key={`${it.kind}-${it.id || it.trackId}-${i}`}>
+                {it.kind === "artist" ? (
+                  <React.Fragment>
+                    <ArtistCard artist={it} onSelect={(a) => onOpenArtist(a)} />
+                    <span className="rail-reason">{it.caption}</span>
+                  </React.Fragment>
+                ) : (
+                  <div
+                    className="song-mini"
+                    onClick={() => onPlaySong(it)}
+                    title="Reproducir"
+                  >
+                    {it.artwork ? <img src={it.artwork} alt="" loading="lazy" /> : null}
+                    <strong>{it.track}</strong>
+                    <span>{it.artist}</span>
+                    <span className="rail-reason">{it.caption}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // Perfil público de un amigo: favoritos y top escuchas.
+  function FriendProfile({ profile, loading, error, onOpenArtist, onPlaySongs, currentId, playing, likeIds, onToggleLike, own, onGoSettings }) {
+    if (loading) return <div className="loader"><span className="spinner" /> Cargando…</div>;
+    if (error) return <div className="error">{error}</div>;
+    if (!profile) return null;
+    return (
+      <section>
+        <div className="profile-head">
+          <span className="avatar lg">{String(profile.user.name || "?").charAt(0).toUpperCase()}</span>
+          <div>
+            <h2 className="section-title" style={{ margin: 0 }}>{profile.user.name}</h2>
+            <p className="muted">{profile.artists.length} artistas · {profile.songs.length} canciones favoritas</p>
+          </div>
+          {own ? (
+            <button type="button" className="icon-btn" onClick={onGoSettings} aria-label="Ajustes" title="Ajustes" style={{ marginLeft: "auto" }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.08-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
+            </button>
+          ) : null}
+        </div>
+        {profile.top && profile.top.length > 0 ? (
+          <React.Fragment>
+            <h3 className="section-title">Lo que más escucha</h3>
+            <div className="rail-track static">
+              {profile.top.map((a) => (
+                <div className="rail-item" key={`top-${a.id}`}>
+                  <ArtistCard artist={a} onSelect={onOpenArtist} />
+                  <span className="rail-reason">{a.plays} escuchas</span>
+                </div>
+              ))}
+            </div>
+          </React.Fragment>
+        ) : null}
+        {profile.artists.length > 0 ? (
+          <React.Fragment>
+            <h3 className="section-title">Artistas que le gustan</h3>
+            <ArtistGrid artists={profile.artists} onSelect={onOpenArtist} />
+          </React.Fragment>
+        ) : null}
+        {profile.songs.length > 0 ? (
+          <React.Fragment>
+            <h3 className="section-title">Canciones que le gustan</h3>
+            <SongList
+              songs={profile.songs}
+              currentId={currentId}
+              playing={playing}
+              likeIds={likeIds}
+              onPlay={(i) => onPlaySongs(profile.songs, i)}
+              onToggleLike={onToggleLike}
+            />
+          </React.Fragment>
+        ) : null}
+        {profile.artists.length === 0 && profile.songs.length === 0 ? (
+          <p className="muted">Aún no tiene favoritos.</p>
+        ) : null}
+      </section>
+    );
+  }
+
   function Loader() {
     return (
       <div className="loader">
@@ -1212,5 +1400,5 @@ window.ArtistaViews = (function () {
     );
   }
 
-  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView };
+  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile };
 })();

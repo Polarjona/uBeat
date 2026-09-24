@@ -306,6 +306,55 @@
       return data.artists || [];
     },
 
+    // ---- Social ----
+    async friends() {
+      const res = await fetch("/api/friends", { headers: (await this.authHeaders()) });
+      const data = await handle(res);
+      return { friends: data.friends || [], pendingIn: data.pendingIn || [], pendingOut: data.pendingOut || [] };
+    },
+
+    async sendFriendRequest(email) {
+      const res = await fetch("/api/friends/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ email }),
+      });
+      await handle(res);
+    },
+
+    async respondFriend(from, accept) {
+      const res = await fetch("/api/friends/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ from, accept }),
+      });
+      await handle(res);
+    },
+
+    async removeFriend(uid) {
+      const res = await fetch(`/api/friends/${uid}`, {
+        method: "DELETE",
+        headers: (await this.authHeaders()),
+      });
+      await handle(res);
+    },
+
+    async friendProfile(uid) {
+      const res = await fetch(`/api/friends/${uid}/profile`, {
+        headers: (await this.authHeaders()),
+      });
+      const data = await handle(res);
+      return data;
+    },
+
+    async friendsActivity() {
+      const res = await fetch("/api/friends/activity", {
+        headers: (await this.authHeaders()),
+      });
+      const data = await handle(res);
+      return data.items || [];
+    },
+
     // ---- Rankings ----
     async charts(storefront) {
       const res = await fetch(`/api/charts?storefront=${storefront}`);

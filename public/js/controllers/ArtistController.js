@@ -132,7 +132,7 @@
       // Firebase avisa solo de los cambios (incluido el arranque).
       model.onSession(async (user, likeIds, songLikeIds) => {
         if (!user) {
-          setState((s) => ({ ...s, user: null, likeIds: [], songLikeIds: [], forYou: [] }));
+          setState((s) => ({ ...s, user: null, likeIds: [], songLikeIds: [], forYou: [], friends: [], pendingIn: [], pendingOut: [], activity: [] }));
           return;
         }
         setState((s) => ({ ...s, user }));
@@ -140,6 +140,8 @@
           setState((s) => ({ ...s, likeIds, songLikeIds }));
         }
         loadForYou();
+        loadSocial();
+        loadActivity();
       });
     }
 
@@ -162,6 +164,8 @@
           authMode: "login",
         }));
         loadForYou();
+        loadSocial();
+        loadActivity();
       } catch (err) {
         setState((s) => ({ ...s, authLoading: false, authError: err.message }));
       }
@@ -185,6 +189,8 @@
           authMode: "login",
         }));
         loadForYou();
+        loadSocial();
+        loadActivity();
       } catch (err) {
         setState((s) => ({ ...s, authLoading: false, authError: err.message }));
       }
@@ -205,6 +211,11 @@
         barIdx: 0,
         barPlaying: false,
         forYou: [],
+        friends: [],
+        pendingIn: [],
+        pendingOut: [],
+        activity: [],
+        friendProfile: null,
         view: "home",
       }));
     }
@@ -566,6 +577,92 @@
       } catch (_) {}
     }
 
+    // ---- Social ----
+    async function loadSocial() {
+      const { user } = getState();
+      if (!user) {
+        setState((s) => ({ ...s, friends: [], pendingIn: [], pendingOut: [] }));
+        return;
+      }
+      setState((s) => ({ ...s, loadingSocial: true, socialError: "" }));
+      try {
+        const f = await model.friends();
+        setState((s) => ({ ...s, ...f, loadingSocial: false }));
+      } catch (err) {
+        setState((s) => ({ ...s, loadingSocial: false, socialError: err.message }));
+      }
+    }
+
+    async function sendFriendRequest(email) {
+      setState((s) => ({ ...s, socialError: "" }));
+      try {
+        await model.sendFriendRequest(email);
+        await loadSocial();
+        return true;
+      } catch (err) {
+        setState((s) => ({ ...s, socialError: err.message }));
+        return false;
+      }
+    }
+
+    async function respondFriend(from, accept) {
+      try {
+        await model.respondFriend(from, accept);
+        await loadSocial();
+        await loadActivity();
+      } catch (err) {
+        setState((s) => ({ ...s, socialError: err.message }));
+      }
+    }
+
+    async function removeFriend(uid) {
+      try {
+        await model.removeFriend(uid);
+        await loadSocial();
+        await loadActivity();
+      } catch (err) {
+        setState((s) => ({ ...s, socialError: err.message }));
+      }
+    }
+
+    async function openFriend(uid) {
+      setState((s) => ({ ...s, view: "friendProfile", drawer: false, loadingProfile: true, profileError: "", friendProfile: null }));
+      try {
+        const p = await model.friendProfile(uid);
+        setState((s) => ({ ...s, friendProfile: p, loadingProfile: false }));
+      } catch (err) {
+        setState((s) => ({ ...s, loadingProfile: false, profileError: err.message }));
+      }
+    }
+
+    async function openMyProfile() {
+      const { user } = getState();
+      if (!user) return;
+      setState((s) => ({ ...s, view: "friendProfile", drawer: false, loadingProfile: true, profileError: "", friendProfile: null }));
+      try {
+        await Promise.all([loadFavorites(), loadSongFavorites()]);
+        const p = await model.friendProfile(user.id);
+        setState((s) => ({ ...s, friendProfile: { ...p, own: true }, loadingProfile: false }));
+      } catch (err) {
+        setState((s) => ({ ...s, loadingProfile: false, profileError: err.message }));
+      }
+    }
+
+    async function loadActivity() {
+      const { user } = getState();
+      if (!user) {
+        setState((s) => ({ ...s, activity: [] }));
+        return;
+      }
+      setState((s) => ({ ...s, loadingActivity: true }));
+      try {
+        const items = await model.friendsActivity();
+        setState((s) => ({ ...s, activity: items, loadingActivity: false }));
+      } catch (_) {
+        setState((s) => ({ ...s, loadingActivity: false, activity: [] }));
+      }
+    }
+
     // ---- Transición de la portada ----
     function enter() {
       const { entered, leaving } = getState();
@@ -643,6 +740,13 @@
       loadSongFavorites,
       loadForYou,
       trackStarted,
+      loadSocial,
+      sendFriendRequest,
+      respondFriend,
+      removeFriend,
+      openFriend,
+      openMyProfile,
+      loadActivity,
       loadPlaylists,
       createPlaylist,
       deletePlaylist,

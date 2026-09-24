@@ -72,6 +72,8 @@ body {
   white-space: nowrap;
 }
 
+.logo.clickable { cursor: pointer; }
+
 .logo .disc {
   width: 34px;
   height: 34px;
@@ -750,7 +752,7 @@ code {
 .icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
 .icon-btn:hover { border-color: var(--accent); }
 
-.user-btn { display: inline-flex; align-items: center; gap: 8px; }
+.user-btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding-top: 0; padding-bottom: 0; }
 
 .user-btn::after {
   content: "▾";
@@ -760,8 +762,8 @@ code {
 }
 
 .user-btn .avatar {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
@@ -823,6 +825,138 @@ code {
 
 .reset-card .btn.ghost { margin-top: 12px; }
 
+/* ---------- Social ---------- */
+.drawer-social {
+  border-top: 1px solid var(--line);
+  margin-top: auto;
+  padding-top: 6px;
+  flex-shrink: 0;
+}
+
+.drawer-item.social-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.social-body {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.3s ease;
+  padding: 0 4px;
+}
+
+.social-body.open {
+  max-height: 320px;
+  overflow-y: auto;
+  opacity: 1;
+  padding: 2px 4px 8px;
+}
+
+.social-title {
+  margin: 10px 0 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.social-add { display: flex; gap: 6px; margin: 8px 0; }
+
+.social-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  outline: none;
+  font-size: 13px;
+}
+
+.social-add input:focus { border-color: var(--accent); }
+
+.social-add .btn { padding: 8px 12px; font-size: 13px; }
+
+.friend-row { display: flex; align-items: center; gap: 8px; padding: 6px 2px; }
+
+.friend-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.friend-open:hover .fname { color: var(--accent-hover); }
+
+.avatar.sm { width: 26px; height: 26px; font-size: 12px; }
+.avatar.lg { width: 52px; height: 52px; font-size: 20px; }
+
+.avatar.sm, .avatar.lg {
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.fname { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mini-ok, .mini-no {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mini-ok:hover { border-color: var(--accent); color: var(--accent-hover); }
+.mini-no:hover { border-color: var(--danger); color: var(--danger); }
+
+.error.sm { font-size: 12.5px; padding: 8px 10px; }
+
+/* Mini tarjeta de canción en el rail social */
+.song-mini {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  width: 210px;
+}
+
+.song-mini:hover { transform: translateY(-3px); border-color: var(--accent); }
+
+.song-mini img { width: 100%; height: 150px; object-fit: cover; display: block; background: var(--surface-2); }
+
+.song-mini strong { display: block; font-size: 13.5px; padding: 10px 12px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.song-mini > span { display: block; font-size: 12px; color: var(--muted); padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.song-mini .rail-reason { padding: 4px 12px 10px; }
+
+.profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+
+.rail-track.static { overflow-x: auto; }
+
 /* ---------- Menú lateral ---------- */
 .drawer-scrim {
   position: fixed;
@@ -850,9 +984,12 @@ code {
   display: flex;
   flex-direction: column;
   padding: 18px;
+  overflow: hidden;
 }
 
 .drawer.open { transform: none; }
+
+.drawer-nav { flex: 1; min-height: 0; overflow-y: auto; }
 
 .drawer-head {
   display: flex;
@@ -887,15 +1024,35 @@ code {
 .drawer-item.active { background: var(--surface-2); color: var(--accent-hover); }
 
 .drawer-foot {
-  margin-top: auto;
-  padding-top: 14px;
+  margin-top: 0;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   font-size: 13px;
   color: var(--muted);
+  flex-shrink: 0;
 }
+
+.user-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.user-open:hover .fname { color: var(--accent-hover); }
+
+.drawer-foot .icon-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* ---------- Modal Usuarios ---------- */
 .modal-scrim {
