@@ -1,3 +1,8 @@
 [API] Conectado a Firestore correctamente.
 Artistas App en http://localhost:8080
 Modo Firestore: ACTIVO
+[API] "charlie puth" no estaba en Firestore: importado y guardado (1).
+[API] "ed sheeran" no estaba en Firestore: importado y guardado (1).
+[API] "shawn mendes" no estaba en Firestore: importado y guardado (1).
+[API] "the weeknd" no estaba en Firestore: importado y guardado (1).
+[API] "ado" no estaba en Firestore: importado y guardado (2).

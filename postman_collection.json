@@ -47,7 +47,7 @@
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyBaqmO-S7XmvXxmlKY_8rc-NDJeJbMYMXg"
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyDbG0V_ocYfEgVEEYEqZ-vaYJt4fnQ00vo"
       }
     },
     {
@@ -56,7 +56,7 @@
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyBaqmO-S7XmvXxmlKY_8rc-NDJeJbMYMXg"
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyDbG0V_ocYfEgVEEYEqZ-vaYJt4fnQ00vo"
       }
     },
     {
@@ -90,7 +90,7 @@
         "method": "POST",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": { "mode": "raw", "raw": "{\n  \"requestType\": \"PASSWORD_RESET\",\n  \"email\": \"demo@ejemplo.com\",\n  \"continueUrl\": \"http://localhost:8080/?mode=resetPassword\"\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyBaqmO-S7XmvXxmlKY_8rc-NDJeJbMYMXg"
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyDbG0V_ocYfEgVEEYEqZ-vaYJt4fnQ00vo"
       }
     },
     {
