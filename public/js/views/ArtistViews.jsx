@@ -830,26 +830,199 @@ window.ArtistaViews = (function () {
 
   // Vista Descubrir: feed infinito de canciones del algoritmo.
   // Auto-scroll al tema actual solo si el usuario lo activa (por defecto off).
+  // Slide individual del feed Descubrir (estilo TikTok/Shorts):
+  // una canción a pantalla completa, se reproduce sola al entrar en pantalla.
+  function DiscoverSlide({ song, index, active, paused, liked, onToggleLike, onOpenArtist, onTrackStart }) {
+    const audioRef = useRef(null);
+    const [playing, setPlaying] = useState(true);
+    const [blocked, setBlocked] = useState(false);
+    const [progress, setProgress] = useState(0);
+
+    useEffect(() => {
+      const a = audioRef.current;
+      if (!a) return undefined;
+      if (active && playing && !paused) {
+        const p = a.play();
+        if (p && p.catch) {
+          p.then(() => {
+            setBlocked(false);
+            if (onTrackStart)
+              onTrackStart({
+                artistId: song.artistId,
+                trackId: song.trackId,
+                track: song.track,
+                artist: song.artist,
+              });
+          }).catch(() => setBlocked(true));
+        }
+      } else {
+        a.pause();
+      }
+      return undefined;
+    }, [active, playing, paused]);
+
+    const toggle = () => {
+      // Si el navegador bloqueó el autoplay, el primer toque lo reanuda.
+      if (blocked) {
+        setBlocked(false);
+        const a = audioRef.current;
+        if (a) {
+          const p = a.play();
+          if (p && p.catch) {
+            p.then(() => {
+              if (onTrackStart)
+                onTrackStart({
+                  artistId: song.artistId,
+                  trackId: song.trackId,
+                  track: song.track,
+                  artist: song.artist,
+                });
+            }).catch(() => setBlocked(true));
+          }
+        }
+        return;
+      }
+      setPlaying((p) => !p);
+    };
+
+    const seek = (e) => {
+      e.stopPropagation();
+      const a = audioRef.current;
+      if (!a || !a.duration) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      a.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * a.duration;
+    };
+
+    const openArtist = (e) => {
+      e.stopPropagation();
+      if (!song.artistId) return;
+      onOpenArtist(
+        {
+          id: song.artistId,
+          name: song.artistName || song.artist,
+          image: song.artistImage || song.artwork,
+          country: song.artistCountry || "—",
+          genre: song.artistGenre || "—",
+        },
+        e.currentTarget.getBoundingClientRect()
+      );
+    };
+
+    const showHint = blocked || !playing;
+
+    return (
+      <article className="disc-slide" data-i={index} data-song={String(song.trackId)} onClick={toggle}>
+        <div
+          className="disc-bg"
+          style={song.artwork ? { backgroundImage: `url("${song.artwork}")` } : undefined}
+        />
+        <div className="disc-shade" />
+        {song.artwork ? (
+          <img className={"disc-art" + (showHint ? " dim" : "")} src={song.artwork} alt="" />
+        ) : (
+          <div className="disc-art disc-art-empty" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
+          </div>
+        )}
+
+        {showHint ? (
+          <div className="disc-playhint" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          </div>
+        ) : null}
+
+        <div className="disc-rail" onClick={(e) => e.stopPropagation()}>
+          <HeartButton liked={liked} onToggle={() => onToggleLike(song)} />
+          {song.artistId ? (
+            <button
+              type="button"
+              className="disc-artist-btn"
+              onClick={openArtist}
+              title="Ver artista"
+              aria-label="Ver artista"
+            >
+              {song.artistImage ? (
+                <img src={song.artistImage} alt="" loading="lazy" />
+              ) : (
+                <span>{String(song.artist || "?").charAt(0).toUpperCase()}</span>
+              )}
+              <em>Artista</em>
+            </button>
+          ) : null}
+        </div>
+
+        <div className="disc-info" onClick={toggle}>
+          <strong>{song.track}</strong>
+          <span>{song.artist}</span>
+        </div>
+
+        <div className="disc-progress" onClick={seek} title="Ir a…">
+          <i style={{ width: `${Math.round(progress * 100)}%` }} />
+        </div>
+
+        <audio
+          ref={audioRef}
+          src={song.previewUrl}
+          preload="metadata"
+          loop
+          onTimeUpdate={(e) => {
+            const a = e.currentTarget;
+            setProgress(a.duration ? a.currentTime / a.duration : 0);
+          }}
+          onEnded={() => setPlaying(false)}
+        />
+      </article>
+    );
+  }
+
+  // Vista Descubrir: feed vertical tipo TikTok/Shorts con snap-scroll.
+  // Una canción por pantalla, autoplay al entrar, scroll para la siguiente
+  // e infinito con el algoritmo del backend.
   function DiscoverView({
     songs,
     loading,
     error,
     hasMore,
-    autoScroll,
-    onToggleAutoScroll,
     onLoadMore,
     onRetry,
-    currentId,
-    playing,
     likeIds,
-    onPlay,
     onToggleLike,
-    playlists,
-    onAddToPlaylist,
-    onGoPlaylists,
+    onOpenArtist,
+    onTrackStart,
+    paused,
   }) {
+    const feedRef = useRef(null);
     const sentinelRef = useRef(null);
+    const [activeIdx, setActiveIdx] = useState(0);
 
+    // El feed cubre la pantalla: bloquea el scroll del documento.
+    useEffect(() => {
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "";
+      };
+    }, []);
+
+    // Determina la diapositiva visible (la que debe sonar).
+    useEffect(() => {
+      const root = feedRef.current;
+      if (!root || !songs.length) return undefined;
+      const ob = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((en) => {
+            if (en.isIntersecting && en.intersectionRatio >= 0.6) {
+              const i = Number(en.target.getAttribute("data-i"));
+              if (!Number.isNaN(i)) setActiveIdx(i);
+            }
+          });
+        },
+        { root, threshold: [0.6] }
+      );
+      root.querySelectorAll(".disc-slide").forEach((el) => ob.observe(el));
+      return () => ob.disconnect();
+    }, [songs.length]);
+
+    // Scroll infinito dentro del propio feed.
     useEffect(() => {
       const el = sentinelRef.current;
       if (!el || !hasMore) return undefined;
@@ -857,76 +1030,65 @@ window.ArtistaViews = (function () {
         (entries) => {
           if (entries.some((e) => e.isIntersecting)) onLoadMore();
         },
-        { root: null, rootMargin: "600px" }
+        { root: feedRef.current, rootMargin: "800px" }
       );
       ob.observe(el);
       return () => ob.disconnect();
-    }, [hasMore, onLoadMore]);
+    }, [hasMore, onLoadMore, songs.length]);
 
-    useEffect(() => {
-      if (!autoScroll || !currentId) return;
-      const row = document.getElementById(`disc-${currentId}`);
-      if (row && row.scrollIntoView) {
-        row.scrollIntoView({ block: "center", behavior: "smooth" });
-      }
-    }, [currentId, autoScroll]);
-
-    return (
-      <section>
-        <div className="discover-head">
-          <div>
-            <h2 className="section-title">Descubrir</h2>
-            <p className="muted discover-sub">
-              Scroll infinito con canciones de tu algoritmo. Al terminar una, sigue la siguiente.
-            </p>
-          </div>
-          <button
-            type="button"
-            className={"btn ghost disc-auto" + (autoScroll ? " active" : "")}
-            onClick={onToggleAutoScroll}
-            aria-pressed={autoScroll}
-          >
-            {autoScroll ? "Auto-scroll: activo" : "Auto-scroll: off"}
-          </button>
-        </div>
-
-        {error && !songs.length ? (
+    if (error && !songs.length) {
+      return (
+        <div className="disc-feed disc-state">
           <div className="error">
             {error}{" "}
             <button type="button" className="link" onClick={onRetry}>
               Reintentar
             </button>
           </div>
-        ) : loading && !songs.length ? (
+        </div>
+      );
+    }
+    if (loading && !songs.length) {
+      return (
+        <div className="disc-feed disc-state">
           <Loader />
-        ) : !songs.length ? (
+        </div>
+      );
+    }
+    if (!songs.length) {
+      return (
+        <div className="disc-feed disc-state">
           <p className="muted">No hay canciones ahora mismo. Prueba más tarde.</p>
-        ) : (
-          <ol className="song-list">
-            {songs.map((sg, i) => (
-              <SongRow
-                key={String(sg.trackId) + "-" + i}
-                domId={`disc-${sg.trackId}`}
-                song={sg}
-                active={String(currentId) === String(sg.trackId)}
-                playing={playing}
-                liked={(likeIds || []).some((id) => String(id) === String(sg.trackId))}
-                onPlay={() => onPlay(i)}
-                onToggleLike={() => onToggleLike(sg)}
-                playlists={playlists}
-                onAddToPlaylist={onAddToPlaylist}
-                onGoPlaylists={onGoPlaylists}
-              />
-            ))}
-          </ol>
-        )}
+        </div>
+      );
+    }
 
-        {loading && songs.length ? <Loader /> : null}
-        {hasMore ? <div ref={sentinelRef} className="sentinel" /> : null}
-        {!hasMore && songs.length && !loading ? (
-          <p className="muted center">Has llegado al final de Descubrir.</p>
-        ) : null}
-      </section>
+    return (
+      <div className="disc-feed" ref={feedRef}>
+        <div className="disc-hint">Descubrir · desliza para la siguiente</div>
+        {songs.map((sg, i) => (
+          <DiscoverSlide
+            key={String(sg.trackId) + "-" + i}
+            song={sg}
+            index={i}
+            active={i === activeIdx}
+            paused={paused}
+            liked={(likeIds || []).some((id) => String(id) === String(sg.trackId))}
+            onToggleLike={onToggleLike}
+            onOpenArtist={onOpenArtist}
+            onTrackStart={onTrackStart}
+          />
+        ))}
+        <div className="disc-tail">
+          {hasMore ? (
+            <div ref={sentinelRef} className="loader">
+              <span className="spinner" /> Cargando más…
+            </div>
+          ) : (
+            <p className="muted">Has llegado al final de Descubrir.</p>
+          )}
+        </div>
+      </div>
     );
   }
 

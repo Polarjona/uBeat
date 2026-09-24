@@ -991,16 +991,30 @@ app.get("/api/for-you", async (req, res) => {
 // ---------- Descubrir: feed infinito de canciones del algoritmo ----------
 // Devuelve una página de canciones (vistas previas de iTunes) para artistas
 // puntuados con el mismo algoritmo que /api/for-you (o catálogo si es frío).
+// El orden es aleatorio en cada renovación de caché (sesgado por el algoritmo
+// en usuarios con sesión), para que el feed no sea siempre igual.
 const DISCOVER_PAGE_ARTISTS = 4;
+const DISCOVER_TTL_MS = 2 * 60e3;
 const discoverRankCache = new Map(); // uid|guest -> { at, list }
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
 
 async function discoverArtists(uid) {
   const key = uid || "guest";
   const hit = discoverRankCache.get(key);
-  if (hit && Date.now() - hit.at < 5 * 60e3) return hit.list;
+  if (hit && Date.now() - hit.at < DISCOVER_TTL_MS) return hit.list;
   const snap = await db.collection(COLLECTION).get();
   const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  let list = all;
+  let list = shuffle(all);
   if (uid) {
     const [likesS, tasteS] = await Promise.all([
       db.collection(LIKES_COL).where("uid", "==", uid).get(),
@@ -1027,16 +1041,17 @@ async function discoverArtists(uid) {
         const sims = await similarIds(s, all);
         sims.forEach((sid, i) => add(sid, SIM_W / (i + 1)));
       }
+      // Puntuados primero pero con jitter aleatorio (mantiene la sesga del
+      // algoritmo sin un orden fijo); el resto, barajado.
       const ranked = [...score.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([id]) => byId.get(String(id)))
-        .filter(Boolean);
-      const rest = all.filter((a) => !score.has(String(a.id)));
+        .map(([id, sc]) => ({ a: byId.get(String(id)), w: sc * (0.5 + Math.random()) }))
+        .filter((x) => x.a)
+        .sort((x, y) => y.w - x.w)
+        .map((x) => x.a);
+      const rest = shuffle(all.filter((a) => !score.has(String(a.id))));
       list = ranked.concat(rest);
     }
   }
-  // Orden estable pseudoaleatorio para invitados (rotación por sesión).
-  if (!uid) list = [...all].sort((a, b) => String(a.id).localeCompare(String(b.id)));
   discoverRankCache.set(key, { at: Date.now(), list });
   return list;
 }
@@ -1077,13 +1092,31 @@ app.get("/api/discover", async (req, res) => {
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const ranked = await discoverArtists(uid);
     if (!ranked.length) return res.json({ ok: true, songs: [], hasMore: false, offset: 0 });
+    const byName = new Map();
+    ranked.forEach((a) => {
+      const k = String(a.name || "").toLowerCase();
+      if (!byName.has(k)) byName.set(k, a);
+    });
+    const attach = (songs) =>
+      songs.map((t) => {
+        const src = byName.get(String(t.artistName || t.artist || "").toLowerCase());
+        if (!src) return t;
+        return {
+          ...t,
+          artistId: String(src.id),
+          artistName: src.name || t.artistName,
+          artistImage: src.image || "",
+          artistCountry: src.country || "",
+          artistGenre: src.genre || "",
+        };
+      });
     const slice = ranked.slice(offset, offset + DISCOVER_PAGE_ARTISTS);
-    let songs = await itunesPreviewPage(slice.map((a) => a.name));
+    let songs = attach(await itunesPreviewPage(slice.map((a) => a.name)));
     // Rellena con la siguiente ventana si una página sale muy corta.
     let next = offset + slice.length;
     while (songs.length < 8 && next < ranked.length && slice.length > 0) {
       const more = ranked.slice(next, next + DISCOVER_PAGE_ARTISTS);
-      const extra = await itunesPreviewPage(more.map((a) => a.name));
+      const extra = attach(await itunesPreviewPage(more.map((a) => a.name)));
       songs = songs.concat(extra);
       next += more.length;
       if (!more.length) break;

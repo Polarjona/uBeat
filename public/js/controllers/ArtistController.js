@@ -125,7 +125,11 @@
         loadPlaylists();
       }
       if (view === "playlists") loadPlaylists();
-      if (view === "discover" && !getState().discover.length) loadDiscover(true);
+      if (view === "discover") {
+        // El feed tiene su propio audio: cierra la barra para no solapar sonido.
+        if (getState().barQueue.length) closeBar();
+        if (!getState().discover.length) loadDiscover(true);
+      }
     }
 
     // ---- Usuarios ----

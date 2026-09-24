@@ -72,7 +72,6 @@ function App() {
     discoverHasMore: true,
     discoverLoading: false,
     discoverError: "",
-    discoverAuto: false,
     barFromDiscover: false,
     pageColor: "",
     entered: false,
@@ -158,11 +157,7 @@ function App() {
         applyPageColor(pc);
       }
     } catch (_) {}
-    let da = false;
-    try {
-      da = localStorage.getItem("aa_disc_auto") === "1";
-    } catch (_) {}
-    setState((s) => ({ ...s, theme: t, accent: a, pageColor: pc, discoverAuto: da }));
+    setState((s) => ({ ...s, theme: t, accent: a, pageColor: pc }));
   }, []);
 
   const toggleTheme = () =>
@@ -459,26 +454,13 @@ function App() {
             loading={state.discoverLoading}
             error={state.discoverError}
             hasMore={state.discoverHasMore}
-            autoScroll={state.discoverAuto}
-            onToggleAutoScroll={() =>
-              setState((s) => {
-                const v = !s.discoverAuto;
-                try {
-                  localStorage.setItem("aa_disc_auto", v ? "1" : "0");
-                } catch (_) {}
-                return { ...s, discoverAuto: v };
-              })
-            }
             onLoadMore={() => ctrlRef.current.loadDiscover()}
             onRetry={() => ctrlRef.current.loadDiscover(true)}
-            currentId={state.barQueue[state.barIdx] && state.barQueue[state.barIdx].trackId}
-            playing={state.barPlaying}
             likeIds={state.songLikeIds}
-            onPlay={(i) => ctrlRef.current.playDiscover(i)}
             onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
-            playlists={state.playlists}
-            onAddToPlaylist={(pid, sg) => ctrlRef.current.addSongToPlaylist(pid, sg)}
-            onGoPlaylists={() => ctrlRef.current.go("playlists")}
+            onOpenArtist={openDetail}
+            onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
+            paused={!!(state.detail || state.profileCard || state.authModal)}
           />
         ) : state.view === "playlists" ? (
           <section>
