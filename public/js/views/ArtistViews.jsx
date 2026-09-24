@@ -1369,7 +1369,7 @@ window.ArtistaViews = (function () {
               <div className="rail-item" key={`${it.kind}-${it.id || it.trackId}-${i}`}>
                 {it.kind === "artist" ? (
                   <React.Fragment>
-                    <ArtistCard artist={it} onSelect={(a) => onOpenArtist(a)} />
+                    <ArtistCard artist={it} onSelect={onOpenArtist} />
                     <span className="rail-reason">{it.caption}</span>
                   </React.Fragment>
                 ) : (

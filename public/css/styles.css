@@ -989,7 +989,15 @@ code {
 
 .drawer.open { transform: none; }
 
-.drawer-nav { flex: 1; min-height: 0; overflow-y: auto; }
+.drawer-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
 
 .drawer-head {
   display: flex;
@@ -1022,6 +1030,8 @@ code {
 
 .drawer-item:hover { background: var(--surface-2); }
 .drawer-item.active { background: var(--surface-2); color: var(--accent-hover); }
+/* Separa Inicio del resto (Descubrir y siguientes) para que no se peguen. */
+.drawer-nav .drawer-item:first-child { margin-bottom: 8px; }
 
 .drawer-foot {
   margin-top: 0;

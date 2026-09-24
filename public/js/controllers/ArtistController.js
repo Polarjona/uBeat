@@ -671,15 +671,22 @@
       }
     }
 
-    // Se llama al empezar cada tema (una vez por pista, no por pausa).
+    // Se llama al empezar cada tema. La escucha solo cuenta si el usuario
+    // aguanta >= 5 s: si cambia de canción (p. ej. al hacer scroll en
+    // Descubrir) antes, se cancela el temporizador y no se suma.
+    let playLogTimer = null;
     async function trackStarted(info) {
       const { user } = getState();
       if (!user) return;
-      try {
-        await model.logPlay(info);
-        const list = await model.forYou();
-        setState((s) => ({ ...s, forYou: list }));
-      } catch (_) {}
+      if (playLogTimer) clearTimeout(playLogTimer);
+      playLogTimer = setTimeout(async () => {
+        playLogTimer = null;
+        try {
+          await model.logPlay(info);
+          const list = await model.forYou();
+          setState((s) => ({ ...s, forYou: list }));
+        } catch (_) {}
+      }, 5000);
     }
 
     // ---- Social ----
