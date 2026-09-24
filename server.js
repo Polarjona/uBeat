@@ -1056,7 +1056,9 @@ async function discoverArtists(uid) {
   return list;
 }
 
-async function itunesPreviewPage(artistNames) {
+// Devuelve un grupo de canciones POR artista (barrado dentro de cada uno),
+// para poder intercalarlos y no mostrar N previews seguidas del mismo.
+async function itunesPreviewGroups(artistNames) {
   const pages = await Promise.all(
     artistNames.map(async (name) => {
       try {
@@ -1066,24 +1068,48 @@ async function itunesPreviewPage(artistNames) {
         const r = await fetch(url);
         if (!r.ok) return [];
         const data = await r.json();
-        return (data.results || [])
-          .filter((t) => t.previewUrl)
-          .map((t) => ({
-            trackId: t.trackId,
-            track: t.trackName || "Sin título",
-            artist: t.artistName || name,
-            album: t.collectionName || "",
-            artwork: (t.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
-            previewUrl: t.previewUrl,
-            durationMs: t.trackTimeMillis || 30000,
-            artistName: name,
-          }));
+        return shuffle(
+          (data.results || [])
+            .filter((t) => t.previewUrl)
+            .map((t) => ({
+              trackId: t.trackId,
+              track: t.trackName || "Sin título",
+              artist: t.artistName || name,
+              album: t.collectionName || "",
+              artwork: (t.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
+              previewUrl: t.previewUrl,
+              durationMs: t.trackTimeMillis || 30000,
+              artistName: name,
+            }))
+        );
       } catch (_) {
         return [];
       }
     })
   );
-  return pages.flat();
+  return pages;
+}
+
+// Round-robin: una canción de cada artista por vuelta (A1,B1,C1,A2,B2,...).
+// Nunca salen dos previews seguidas del mismo artista si hay varios grupos.
+function interleaveGroups(groups) {
+  const queues = groups.filter((g) => g && g.length).map((g) => [...g]);
+  const out = [];
+  let added = true;
+  while (added) {
+    added = false;
+    for (const q of queues) {
+      if (q.length) {
+        out.push(q.shift());
+        added = true;
+      }
+    }
+  }
+  return out;
+}
+
+function countSongs(groups) {
+  return groups.reduce((n, g) => n + g.length, 0);
 }
 
 app.get("/api/discover", async (req, res) => {
@@ -1111,16 +1137,18 @@ app.get("/api/discover", async (req, res) => {
         };
       });
     const slice = ranked.slice(offset, offset + DISCOVER_PAGE_ARTISTS);
-    let songs = attach(await itunesPreviewPage(slice.map((a) => a.name)));
+    let groups = await itunesPreviewGroups(slice.map((a) => a.name));
     // Rellena con la siguiente ventana si una página sale muy corta.
     let next = offset + slice.length;
-    while (songs.length < 8 && next < ranked.length && slice.length > 0) {
+    while (countSongs(groups) < 8 && next < ranked.length && slice.length > 0) {
       const more = ranked.slice(next, next + DISCOVER_PAGE_ARTISTS);
-      const extra = attach(await itunesPreviewPage(more.map((a) => a.name)));
-      songs = songs.concat(extra);
+      const extra = await itunesPreviewGroups(more.map((a) => a.name));
+      groups = groups.concat(extra);
       next += more.length;
       if (!more.length) break;
     }
+    // Intercala artista a artista para que el feed no agrupe previews.
+    let songs = attach(interleaveGroups(groups));
     const seen = new Set();
     songs = songs.filter((t) => {
       const k = String(t.trackId);

@@ -53,7 +53,7 @@
   }
 
   // reCAPTCHA v3 (invisible, solo pestaña de login).
-  const RECAPTCHA_SITE_KEY = "6Ld3R74tAAAAAIjxWxZcYB93w2dVvSPzUoZ0H4H-";
+  const RECAPTCHA_SITE_KEY = "6LfTjcwtAAAAAN1dDkNAnwjDk8fEszeAHYvprjJZ";
   let recaptchaLoading = null;
 
   function loadRecaptcha() {
