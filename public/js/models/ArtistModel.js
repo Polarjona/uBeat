@@ -219,6 +219,41 @@
       return data.songs || [];
     },
 
+    // ---- Notas de artistas (0-10) ----
+    async setRating(artistId, score) {
+      const res = await fetch("/api/ratings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ artistId, score }),
+      });
+      const data = await handle(res);
+      return data.score;
+    },
+
+    async myRatings() {
+      if (!(window.fbAuth && window.fbAuth.currentUser)) return {};
+      try {
+        const res = await fetch("/api/ratings/ids", { headers: (await this.authHeaders()) });
+        const data = await handle(res);
+        return data.ratings || {};
+      } catch (_) {
+        return {};
+      }
+    },
+
+    // ---- Descubrir (feed infinito de canciones) ----
+    async discover(offset) {
+      const res = await fetch(`/api/discover?offset=${Number(offset) || 0}`, {
+        headers: (await this.authHeaders()),
+      });
+      const data = await handle(res);
+      return {
+        songs: data.songs || [],
+        hasMore: !!data.hasMore,
+        offset: Number(data.offset) || 0,
+      };
+    },
+
   // El email con el enlace lo envía Firebase; el enlace vuelve a esta app.
     async forgot(email) {
       try {

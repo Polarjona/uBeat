@@ -673,6 +673,49 @@ app.get("/api/song-likes", async (req, res) => {
   }
 });
 
+// ---------- Notas de artistas (0-10, por usuario) ----------
+const RATINGS_COL = "ratings";
+
+app.post("/api/ratings", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const artistId = String(req.body.artistId || "").trim();
+    if (!artistId) return res.status(400).json({ ok: false, error: "Falta artistId." });
+    const ref = db.collection(RATINGS_COL).doc(`${uid}_${artistId}`);
+    const score = req.body.score;
+    if (score === null || score === undefined || score === "") {
+      await ref.delete();
+      return res.json({ ok: true, score: null });
+    }
+    const n = Number(score);
+    if (!Number.isInteger(n) || n < 0 || n > 10)
+      return res.status(400).json({ ok: false, error: "La nota debe ser un entero de 0 a 10." });
+    await ref.set(
+      { uid, artistId, score: n, updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
+    res.json({ ok: true, score: n });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/ratings/ids", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const s = await db.collection(RATINGS_COL).where("uid", "==", uid).get();
+    const ratings = {};
+    s.docs.forEach((d) => {
+      ratings[String(d.data().artistId)] = Number(d.data().score);
+    });
+    res.json({ ok: true, ratings });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ---------- Playlists ----------
 const PLAYLISTS_COL = "playlists";
 const MAX_SONGS_PER_PLAYLIST = 200;
@@ -940,6 +983,119 @@ app.get("/api/for-you", async (req, res) => {
       .slice(0, 20)
       .map(([id, pts]) => ({ ...byId.get(String(id)), score: Math.round(pts * 10) / 10, reason: reason.get(String(id)) }));
     res.json({ ok: true, artists: ranked, cold: false, source: lastfmKey() ? "taste+lastfm" : "taste" });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------- Descubrir: feed infinito de canciones del algoritmo ----------
+// Devuelve una página de canciones (vistas previas de iTunes) para artistas
+// puntuados con el mismo algoritmo que /api/for-you (o catálogo si es frío).
+const DISCOVER_PAGE_ARTISTS = 4;
+const discoverRankCache = new Map(); // uid|guest -> { at, list }
+
+async function discoverArtists(uid) {
+  const key = uid || "guest";
+  const hit = discoverRankCache.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60e3) return hit.list;
+  const snap = await db.collection(COLLECTION).get();
+  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  let list = all;
+  if (uid) {
+    const [likesS, tasteS] = await Promise.all([
+      db.collection(LIKES_COL).where("uid", "==", uid).get(),
+      db.collection(TASTE_COL).where("uid", "==", uid).get(),
+    ]);
+    const likedIds = new Set(likesS.docs.map((d) => String(d.data().artistId)));
+    const plays = new Map();
+    tasteS.docs.forEach((d) => plays.set(String(d.data().artistId), Number(d.data().plays || 0)));
+    if (likedIds.size || plays.size) {
+      const byId = new Map(all.map((a) => [String(a.id), a]));
+      const score = new Map();
+      const add = (id, pts) => {
+        if (!byId.has(String(id))) return;
+        score.set(String(id), (score.get(String(id)) || 0) + pts);
+      };
+      likedIds.forEach((id) => add(id, LIKE_W));
+      plays.forEach((n, id) => add(id, Math.min(n, 10) * PLAY_W));
+      const seeds = [...score.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([id]) => byId.get(String(id)))
+        .filter(Boolean);
+      for (const s of seeds) {
+        const sims = await similarIds(s, all);
+        sims.forEach((sid, i) => add(sid, SIM_W / (i + 1)));
+      }
+      const ranked = [...score.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([id]) => byId.get(String(id)))
+        .filter(Boolean);
+      const rest = all.filter((a) => !score.has(String(a.id)));
+      list = ranked.concat(rest);
+    }
+  }
+  // Orden estable pseudoaleatorio para invitados (rotación por sesión).
+  if (!uid) list = [...all].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  discoverRankCache.set(key, { at: Date.now(), list });
+  return list;
+}
+
+async function itunesPreviewPage(artistNames) {
+  const pages = await Promise.all(
+    artistNames.map(async (name) => {
+      try {
+        const url =
+          `https://itunes.apple.com/search?term=${encodeURIComponent(name)}` +
+          `&entity=song&limit=5&country=ES`;
+        const r = await fetch(url);
+        if (!r.ok) return [];
+        const data = await r.json();
+        return (data.results || [])
+          .filter((t) => t.previewUrl)
+          .map((t) => ({
+            trackId: t.trackId,
+            track: t.trackName || "Sin título",
+            artist: t.artistName || name,
+            album: t.collectionName || "",
+            artwork: (t.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
+            previewUrl: t.previewUrl,
+            durationMs: t.trackTimeMillis || 30000,
+            artistName: name,
+          }));
+      } catch (_) {
+        return [];
+      }
+    })
+  );
+  return pages.flat();
+}
+
+app.get("/api/discover", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const ranked = await discoverArtists(uid);
+    if (!ranked.length) return res.json({ ok: true, songs: [], hasMore: false, offset: 0 });
+    const slice = ranked.slice(offset, offset + DISCOVER_PAGE_ARTISTS);
+    let songs = await itunesPreviewPage(slice.map((a) => a.name));
+    // Rellena con la siguiente ventana si una página sale muy corta.
+    let next = offset + slice.length;
+    while (songs.length < 8 && next < ranked.length && slice.length > 0) {
+      const more = ranked.slice(next, next + DISCOVER_PAGE_ARTISTS);
+      const extra = await itunesPreviewPage(more.map((a) => a.name));
+      songs = songs.concat(extra);
+      next += more.length;
+      if (!more.length) break;
+    }
+    const seen = new Set();
+    songs = songs.filter((t) => {
+      const k = String(t.trackId);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    res.json({ ok: true, songs, hasMore: next < ranked.length, offset: next });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

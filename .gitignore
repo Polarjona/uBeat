@@ -4,24 +4,7 @@ firebase-key.json
 secrets.json
 # Node portable local + logs (cada PC usa los suyos)
 node-portable/
-*.log
+arranque.log
+server-debug.log
 node_modules/
 .env
-
-# IDEs y editores
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Sistema operativo
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# Build y cache
-dist/
-build/
-.cache/
-*.tmp

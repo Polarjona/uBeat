@@ -125,6 +125,7 @@
         loadPlaylists();
       }
       if (view === "playlists") loadPlaylists();
+      if (view === "discover" && !getState().discover.length) loadDiscover(true);
     }
 
     // ---- Usuarios ----
@@ -142,6 +143,7 @@
         loadForYou();
         loadSocial();
         loadActivity();
+        loadRatings();
       });
     }
 
@@ -166,6 +168,7 @@
         loadForYou();
         loadSocial();
         loadActivity();
+        loadRatings();
       } catch (err) {
         setState((s) => ({ ...s, authLoading: false, authError: err.message }));
       }
@@ -185,40 +188,123 @@
           likeIds: ids,
           songLikeIds: songIds,
           authLoading: false,
-          authModal: false,
-          authMode: "login",
-        }));
-        loadForYou();
-        loadSocial();
-        loadActivity();
-      } catch (err) {
-        setState((s) => ({ ...s, authLoading: false, authError: err.message }));
-      }
+        authModal: false,
+        authMode: "login",
+      }));
+      loadForYou();
+      loadSocial();
+      loadActivity();
+      loadRatings();
+    } catch (err) {
+      setState((s) => ({ ...s, authLoading: false, authError: err.message }));
     }
+  }
 
-    async function logout() {
-      await model.logout();
+  async function logout() {
+    await model.logout();
+    setState((s) => ({
+      ...s,
+      user: null,
+      likeIds: [],
+      favorites: [],
+      songLikeIds: [],
+      songFavorites: [],
+      playlists: [],
+      openPlaylist: null,
+      barQueue: [],
+      barIdx: 0,
+      barPlaying: false,
+      barFromDiscover: false,
+      forYou: [],
+      friends: [],
+      pendingIn: [],
+      pendingOut: [],
+      activity: [],
+      friendProfile: null,
+      profileCard: false,
+      ratings: {},
+      view: "home",
+    }));
+  }
+
+  // ---- Notas de artistas (0-10) ----
+  async function loadRatings() {
+    try {
+      const ratings = await model.myRatings();
+      setState((s) => ({ ...s, ratings }));
+    } catch (_) {}
+  }
+
+  async function setRating(artistId, score) {
+    const { user } = getState();
+    if (!user) {
       setState((s) => ({
         ...s,
-        user: null,
-        likeIds: [],
-        favorites: [],
-        songLikeIds: [],
-        songFavorites: [],
-        playlists: [],
-        openPlaylist: null,
-        barQueue: [],
-        barIdx: 0,
-        barPlaying: false,
-        forYou: [],
-        friends: [],
-        pendingIn: [],
-        pendingOut: [],
-        activity: [],
-        friendProfile: null,
-        view: "home",
+        authModal: true,
+        authError: "Inicia sesión para puntuar.",
       }));
+      return;
     }
+    try {
+      const saved = await model.setRating(artistId, score);
+      setState((s) => {
+        const ratings = { ...s.ratings };
+        if (saved === null || saved === undefined) delete ratings[String(artistId)];
+        else ratings[String(artistId)] = saved;
+        return { ...s, ratings };
+      });
+    } catch (_) {}
+  }
+
+  // ---- Descubrir (feed infinito de canciones) ----
+  async function loadDiscover(reset) {
+    const s = getState();
+    if (s.discoverLoading) return;
+    if (!reset && !s.discoverHasMore) return;
+    setState((x) => ({ ...x, discoverLoading: true, discoverError: "" }));
+    try {
+      const page = await model.discover(reset ? 0 : s.discoverOffset);
+      setState((x) => {
+        const seen = new Set((reset ? [] : x.discover).map((t) => String(t.trackId)));
+        const fresh = page.songs.filter((t) => !seen.has(String(t.trackId)));
+        return {
+          ...x,
+          discover: reset ? page.songs : [...x.discover, ...fresh],
+          discoverOffset: page.offset,
+          discoverHasMore: page.hasMore,
+          discoverLoading: false,
+          barQueue:
+            x.barFromDiscover && !reset ? [...x.barQueue, ...fresh] : x.barQueue,
+        };
+      });
+    } catch (err) {
+      setState((x) => ({ ...x, discoverLoading: false, discoverError: err.message }));
+    }
+  }
+
+  function playDiscover(i) {
+    const s = getState();
+    if (!s.discover.length) return;
+    setState((x) => ({
+      ...x,
+      barQueue: s.discover,
+      barIdx: Math.max(0, Math.min(i, s.discover.length - 1)),
+      barPlaying: true,
+      barClosing: false,
+      barFromDiscover: true,
+    }));
+  }
+
+  // ---- Perfil como card (no cambia de vista) ----
+  function closeProfileCard() {
+    setState((s) => ({
+      ...s,
+      profileCard: false,
+      friendProfile: null,
+      loadingProfile: false,
+      profileError: "",
+    }));
+  }
 
     // ---- Me gusta ----
     async function toggleLike(artistId) {
@@ -442,6 +528,7 @@
         barIdx: idx || 0,
         barPlaying: true,
         barClosing: false,
+        barFromDiscover: false,
       }));
     }
 
@@ -452,10 +539,23 @@
     }
 
     function barStep(dir) {
-      const { barQueue, barIdx } = getState();
+      const s = getState();
+      const { barQueue, barIdx } = s;
       if (!barQueue.length) return;
-      setState((s) => ({
-        ...s,
+      const next = barIdx + dir;
+      if (dir > 0 && next >= barQueue.length && s.barFromDiscover && s.discoverHasMore && !s.discoverLoading) {
+        loadDiscover().then(() => {
+          const st = getState();
+          setState((x) => ({
+            ...x,
+            barIdx: st.barQueue.length > s.barIdx + 1 ? s.barIdx + 1 : 0,
+            barPlaying: true,
+          }));
+        });
+        return;
+      }
+      setState((st) => ({
+        ...st,
         barIdx: (barIdx + dir + barQueue.length) % barQueue.length,
         barPlaying: true,
       }));
@@ -475,6 +575,7 @@
             barIdx: 0,
             barPlaying: false,
             barClosing: false,
+            barFromDiscover: false,
           })),
         380
       );
@@ -626,7 +727,7 @@
     }
 
     async function openFriend(uid) {
-      setState((s) => ({ ...s, view: "friendProfile", drawer: false, loadingProfile: true, profileError: "", friendProfile: null }));
+      setState((s) => ({ ...s, drawer: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
       try {
         const p = await model.friendProfile(uid);
         setState((s) => ({ ...s, friendProfile: p, loadingProfile: false }));
@@ -638,7 +739,7 @@
     async function openMyProfile() {
       const { user } = getState();
       if (!user) return;
-      setState((s) => ({ ...s, view: "friendProfile", drawer: false, loadingProfile: true, profileError: "", friendProfile: null }));
+      setState((s) => ({ ...s, drawer: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
       try {
         await Promise.all([loadFavorites(), loadSongFavorites()]);
         const p = await model.friendProfile(user.id);
@@ -738,6 +839,11 @@
       loadFavorites,
       toggleSongLike,
       loadSongFavorites,
+      loadRatings,
+      setRating,
+      loadDiscover,
+      playDiscover,
+      closeProfileCard,
       loadForYou,
       trackStarted,
       loadSocial,

@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -65,6 +65,16 @@ function App() {
     friendProfile: null,
     loadingProfile: false,
     profileError: "",
+    profileCard: false,
+    ratings: {},
+    discover: [],
+    discoverOffset: 0,
+    discoverHasMore: true,
+    discoverLoading: false,
+    discoverError: "",
+    discoverAuto: false,
+    barFromDiscover: false,
+    pageColor: "",
     entered: false,
     leaving: false,
     detail: null,
@@ -140,7 +150,19 @@ function App() {
         applyAccent(a);
       }
     } catch (_) {}
-    setState((s) => ({ ...s, theme: t, accent: a }));
+    let pc = "";
+    try {
+      const saved = localStorage.getItem("aa_page");
+      if (/^#[0-9a-fA-F]{6}$/.test(saved || "")) {
+        pc = saved;
+        applyPageColor(pc);
+      }
+    } catch (_) {}
+    let da = false;
+    try {
+      da = localStorage.getItem("aa_disc_auto") === "1";
+    } catch (_) {}
+    setState((s) => ({ ...s, theme: t, accent: a, pageColor: pc, discoverAuto: da }));
   }, []);
 
   const toggleTheme = () =>
@@ -201,6 +223,58 @@ function App() {
     root.removeProperty("--accent-ink");
     setState((s) => ({ ...s, accent: "#7c6cf0" }));
   };
+
+  // Color de página (fondo general, independiente del acento).
+  const mixHex = (hex, target, pct) => {
+    const p = (h) => {
+      const n = h.replace("#", "");
+      const v = parseInt(n.length === 3 ? n.split("").map((c) => c + c).join("") : n, 16);
+      return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    };
+    const a = p(hex);
+    const b = p(target);
+    return (
+      "#" +
+      a
+        .map((v, i) => Math.round(v + (b[i] - v) * pct))
+        .map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0"))
+        .join("")
+    );
+  };
+
+  const applyPageColor = (hex) => {
+    const root = document.documentElement.style;
+    const props = ["--bg", "--surface", "--surface-2", "--line", "--text", "--muted", "--scroll"];
+    if (!hex) {
+      props.forEach((p) => root.removeProperty(p));
+      return;
+    }
+    const light = isLightHex(hex);
+    root.setProperty("--bg", hex);
+    root.setProperty("--surface", light ? mixHex(hex, "#ffffff", 0.55) : mixHex(hex, "#ffffff", 0.06));
+    root.setProperty("--surface-2", light ? mixHex(hex, "#ffffff", 0.85) : mixHex(hex, "#ffffff", 0.11));
+    root.setProperty("--line", light ? mixHex(hex, "#000000", 0.14) : mixHex(hex, "#ffffff", 0.16));
+    root.setProperty("--text", light ? "#16191f" : "#e6e9ee");
+    root.setProperty("--muted", light ? "#5d6672" : "#8b949e");
+    root.setProperty("--scroll", light ? "#b9c0c9" : "#3a4358");
+  };
+
+  const setPageColor = (hex) => {
+    try {
+      localStorage.setItem("aa_page", hex);
+    } catch (_) {}
+    applyPageColor(hex);
+    setState((s) => ({ ...s, pageColor: hex }));
+  };
+
+  const resetPageColor = () => {
+    try {
+      localStorage.removeItem("aa_page");
+    } catch (_) {}
+    applyPageColor("");
+    setState((s) => ({ ...s, pageColor: "" }));
+  };
+
   const toggleFilters = () =>
     setState((s) => ({ ...s, showFilters: !s.showFilters, showUser: false }));
 
@@ -250,14 +324,6 @@ function App() {
     <React.Fragment>
       <header className="topbar">
         <div className="topbar-inner">
-          <button
-            className="icon-btn"
-            type="button"
-            aria-label="Abrir menú"
-            onClick={() => setState((s) => ({ ...s, drawer: true }))}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z" /></svg>
-          </button>
           <div
             className="logo clickable"
             onClick={() => {
@@ -346,6 +412,15 @@ function App() {
         </div>
       </header>
 
+      {state.entered && !state.authModal && !state.detail && !state.profileCard ? (
+        <div
+          className="hover-edge"
+          onMouseEnter={() => setState((s) => ({ ...s, drawer: true }))}
+          onClick={() => setState((s) => ({ ...s, drawer: true }))}
+          aria-hidden="true"
+        />
+      ) : null}
+
       <main>
         {state.resetOob ? (
           <ResetPasswordView
@@ -369,11 +444,41 @@ function App() {
             }}
             onAccent={(c) => setAccent(c)}
             onResetAccent={() => resetAccent()}
+            pageColor={state.pageColor}
+            onPageColor={(c) => setPageColor(c)}
+            onPageColorReset={() => resetPageColor()}
             cookies={state.cookies}
             onOpenCookies={() => ctrlRef.current.reopenCookies()}
             user={state.user}
             onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
             onLogout={() => ctrlRef.current.logout()}
+          />
+        ) : state.view === "discover" ? (
+          <DiscoverView
+            songs={state.discover}
+            loading={state.discoverLoading}
+            error={state.discoverError}
+            hasMore={state.discoverHasMore}
+            autoScroll={state.discoverAuto}
+            onToggleAutoScroll={() =>
+              setState((s) => {
+                const v = !s.discoverAuto;
+                try {
+                  localStorage.setItem("aa_disc_auto", v ? "1" : "0");
+                } catch (_) {}
+                return { ...s, discoverAuto: v };
+              })
+            }
+            onLoadMore={() => ctrlRef.current.loadDiscover()}
+            onRetry={() => ctrlRef.current.loadDiscover(true)}
+            currentId={state.barQueue[state.barIdx] && state.barQueue[state.barIdx].trackId}
+            playing={state.barPlaying}
+            likeIds={state.songLikeIds}
+            onPlay={(i) => ctrlRef.current.playDiscover(i)}
+            onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
+            playlists={state.playlists}
+            onAddToPlaylist={(pid, sg) => ctrlRef.current.addSongToPlaylist(pid, sg)}
+            onGoPlaylists={() => ctrlRef.current.go("playlists")}
           />
         ) : state.view === "playlists" ? (
           <section>
@@ -501,20 +606,6 @@ function App() {
               />
             )}
           </section>
-        ) : state.view === "friendProfile" ? (
-          <FriendProfile
-            profile={state.friendProfile}
-            loading={state.loadingProfile}
-            error={state.profileError}
-            onOpenArtist={openDetail}
-            onPlaySongs={(list, i) => ctrlRef.current.playSongs(list, i)}
-            currentId={state.barQueue[state.barIdx] && state.barQueue[state.barIdx].trackId}
-            playing={state.barPlaying}
-            likeIds={state.songLikeIds}
-            onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
-            own={!!(state.friendProfile && state.friendProfile.own)}
-            onGoSettings={() => ctrlRef.current.go("settings")}
-          />
         ) : state.view === "favorites" ? (
           <section>
             <h2 className="section-title">Mis artistas favoritos</h2>
@@ -676,6 +767,26 @@ function App() {
         />
       ) : null}
 
+      {state.profileCard ? (
+        <ProfileCard
+          loading={state.loadingProfile}
+          error={state.profileError}
+          profile={state.friendProfile}
+          onClose={() => ctrlRef.current.closeProfileCard()}
+          onOpenArtist={openDetail}
+          onPlaySongs={(list, i) => ctrlRef.current.playSongs(list, i)}
+          currentId={state.barQueue[state.barIdx] && state.barQueue[state.barIdx].trackId}
+          playing={state.barPlaying}
+          likeIds={state.songLikeIds}
+          onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
+          own={!!(state.friendProfile && state.friendProfile.own)}
+          onGoSettings={() => {
+            ctrlRef.current.closeProfileCard();
+            ctrlRef.current.go("settings");
+          }}
+        />
+      ) : null}
+
       {state.detail ? (
         <ArtistDetail
           artist={state.detail.artist}
@@ -695,6 +806,12 @@ function App() {
           songLikeIds={state.songLikeIds}
           onToggleSong={(t) => ctrlRef.current.toggleSongLike(t)}
           onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
+          rating={
+            state.ratings[String(state.detail.artist.id)] === undefined
+              ? null
+              : state.ratings[String(state.detail.artist.id)]
+          }
+          onRate={(n) => ctrlRef.current.setRating(state.detail.artist.id, n)}
         />
       ) : null}
 

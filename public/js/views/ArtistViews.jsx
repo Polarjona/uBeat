@@ -183,7 +183,11 @@ window.ArtistaViews = (function () {
     return (
       <React.Fragment>
         <div className={"drawer-scrim" + (open ? " open" : "")} onClick={onClose} />
-        <aside className={"drawer" + (open ? " open" : "")} aria-label="Menú">
+        <aside
+          className={"drawer" + (open ? " open" : "")}
+          aria-label="Menú"
+          onMouseLeave={onClose}
+        >
           <div className="drawer-head">
             <strong>Menú</strong>
             <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
@@ -195,6 +199,13 @@ window.ArtistaViews = (function () {
             onClick={() => onGo("home")}
           >
             Inicio
+          </button>
+          <button
+            type="button"
+            className={view === "discover" ? "drawer-item active" : "drawer-item"}
+            onClick={() => onGo("discover")}
+          >
+            Descubrir
           </button>
           <button
             type="button"
@@ -465,6 +476,8 @@ window.ArtistaViews = (function () {
     songLikeIds,
     onToggleSong,
     onTrackStart,
+    rating,
+    onRate,
   }) {
     const targetRect = () => {
       const w = Math.min(880, window.innerWidth * 0.92);
@@ -564,6 +577,35 @@ window.ArtistaViews = (function () {
               <span><span className="k">Género</span><br /><b>{artist.genre}</b></span>
             </div>
             <span className="tag">{artist.genre}</span>
+
+            <div className="rate-box">
+              <p className="detail-eyebrow">Tu nota</p>
+              <div className="rate-row">
+                {Array.from({ length: 11 }, (_, n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={"rate-btn" + (rating === n ? " active" : "")}
+                    onClick={() => onRate && onRate(n)}
+                    aria-label={`Puntuar ${n} de 10`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="rate-foot">
+                <span className="muted">
+                  {rating === null || rating === undefined
+                    ? "Sin puntuar · 0 a 10"
+                    : `Tu nota: ${rating}/10`}
+                </span>
+                {rating !== null && rating !== undefined ? (
+                  <button type="button" className="link" onClick={() => onRate && onRate(null)}>
+                    Quitar nota
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
             <div className="player">
               <p className="detail-eyebrow">Reproducir · Vista previa</p>
@@ -670,6 +712,7 @@ window.ArtistaViews = (function () {
     playlists,
     onAddToPlaylist,
     onGoPlaylists,
+    domId,
   }) {
     const [menu, setMenu] = useState(false);
     const [addedId, setAddedId] = useState(null);
@@ -685,7 +728,7 @@ window.ArtistaViews = (function () {
     };
 
     return (
-      <li className={"song-row" + (active ? " active" : "")}>
+      <li className={"song-row" + (active ? " active" : "")} id={domId || undefined}>
         <button type="button" className="song-main" onClick={onPlay}>
           {song.artwork ? <img src={song.artwork} alt="" loading="lazy" /> : null}
           <span className="song-info">
@@ -782,6 +825,170 @@ window.ArtistaViews = (function () {
           />
         ))}
       </ol>
+    );
+  }
+
+  // Vista Descubrir: feed infinito de canciones del algoritmo.
+  // Auto-scroll al tema actual solo si el usuario lo activa (por defecto off).
+  function DiscoverView({
+    songs,
+    loading,
+    error,
+    hasMore,
+    autoScroll,
+    onToggleAutoScroll,
+    onLoadMore,
+    onRetry,
+    currentId,
+    playing,
+    likeIds,
+    onPlay,
+    onToggleLike,
+    playlists,
+    onAddToPlaylist,
+    onGoPlaylists,
+  }) {
+    const sentinelRef = useRef(null);
+
+    useEffect(() => {
+      const el = sentinelRef.current;
+      if (!el || !hasMore) return undefined;
+      const ob = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) onLoadMore();
+        },
+        { root: null, rootMargin: "600px" }
+      );
+      ob.observe(el);
+      return () => ob.disconnect();
+    }, [hasMore, onLoadMore]);
+
+    useEffect(() => {
+      if (!autoScroll || !currentId) return;
+      const row = document.getElementById(`disc-${currentId}`);
+      if (row && row.scrollIntoView) {
+        row.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    }, [currentId, autoScroll]);
+
+    return (
+      <section>
+        <div className="discover-head">
+          <div>
+            <h2 className="section-title">Descubrir</h2>
+            <p className="muted discover-sub">
+              Scroll infinito con canciones de tu algoritmo. Al terminar una, sigue la siguiente.
+            </p>
+          </div>
+          <button
+            type="button"
+            className={"btn ghost disc-auto" + (autoScroll ? " active" : "")}
+            onClick={onToggleAutoScroll}
+            aria-pressed={autoScroll}
+          >
+            {autoScroll ? "Auto-scroll: activo" : "Auto-scroll: off"}
+          </button>
+        </div>
+
+        {error && !songs.length ? (
+          <div className="error">
+            {error}{" "}
+            <button type="button" className="link" onClick={onRetry}>
+              Reintentar
+            </button>
+          </div>
+        ) : loading && !songs.length ? (
+          <Loader />
+        ) : !songs.length ? (
+          <p className="muted">No hay canciones ahora mismo. Prueba más tarde.</p>
+        ) : (
+          <ol className="song-list">
+            {songs.map((sg, i) => (
+              <SongRow
+                key={String(sg.trackId) + "-" + i}
+                domId={`disc-${sg.trackId}`}
+                song={sg}
+                active={String(currentId) === String(sg.trackId)}
+                playing={playing}
+                liked={(likeIds || []).some((id) => String(id) === String(sg.trackId))}
+                onPlay={() => onPlay(i)}
+                onToggleLike={() => onToggleLike(sg)}
+                playlists={playlists}
+                onAddToPlaylist={onAddToPlaylist}
+                onGoPlaylists={onGoPlaylists}
+              />
+            ))}
+          </ol>
+        )}
+
+        {loading && songs.length ? <Loader /> : null}
+        {hasMore ? <div ref={sentinelRef} className="sentinel" /> : null}
+        {!hasMore && songs.length && !loading ? (
+          <p className="muted center">Has llegado al final de Descubrir.</p>
+        ) : null}
+      </section>
+    );
+  }
+
+  // Perfil de usuario abierto como card/modal (tipo escaparate de artista).
+  function ProfileCard({
+    loading,
+    error,
+    profile,
+    onClose,
+    onOpenArtist,
+    onPlaySongs,
+    currentId,
+    playing,
+    likeIds,
+    onToggleLike,
+    own,
+    onGoSettings,
+  }) {
+    useEffect(() => {
+      document.body.style.overflow = "hidden";
+      const onKey = (e) => {
+        if (e.key === "Escape") onClose();
+      };
+      window.addEventListener("keydown", onKey);
+      return () => {
+        document.body.style.overflow = "";
+        window.removeEventListener("keydown", onKey);
+      };
+    }, []);
+
+    return (
+      <div className="detail-backdrop profile-backdrop" onClick={onClose}>
+        <div
+          className="detail-panel profile-panel"
+          style={{ position: "fixed", margin: 0 }}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-label="Perfil"
+        >
+          <div className="detail-body profile-body">
+            <div className="detail-top">
+              <p className="detail-eyebrow">Perfil</p>
+              <button className="btn ghost detail-close" type="button" onClick={onClose}>
+                Cerrar ✕
+              </button>
+            </div>
+            <FriendProfile
+              profile={profile}
+              loading={loading}
+              error={error}
+              onOpenArtist={onOpenArtist}
+              onPlaySongs={onPlaySongs}
+              currentId={currentId}
+              playing={playing}
+              likeIds={likeIds}
+              onToggleLike={onToggleLike}
+              own={own}
+              onGoSettings={onGoSettings}
+            />
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -1260,6 +1467,7 @@ window.ArtistaViews = (function () {
 
   // Vista de Ajustes: apariencia, cuenta y cookies.
   const ACCENT_PRESETS = ["#7c6cf0", "#3fb950", "#d9a441", "#e5635c", "#2aa8a0", "#d66fb0"];
+  const PAGE_PRESETS = ["#0e1116", "#141b26", "#1a1030", "#10231c", "#2b1a12", "#f4f5f7"];
 
   function SettingsView({
     theme,
@@ -1272,10 +1480,43 @@ window.ArtistaViews = (function () {
     user,
     onLogin,
     onLogout,
+    pageColor,
+    onPageColor,
+    onPageColorReset,
   }) {
     return (
       <section>
         <h2 className="section-title">Ajustes</h2>
+
+        <div className="settings-card">
+          <h3>Color de la página</h3>
+          <p>Cambia el fondo de toda la página. No afecta al color de acento.</p>
+          <div className="swatches">
+            {PAGE_PRESETS.map((c) => (
+              <button
+                key={"p" + c}
+                type="button"
+                className={"swatch" + ((pageColor || "").toLowerCase() === c.toLowerCase() ? " active" : "")}
+                style={{ background: c, borderColor: "var(--line)" }}
+                aria-label={`Color de página ${c}`}
+                title={c}
+                onClick={() => onPageColor(c)}
+              />
+            ))}
+          </div>
+          <div className="custom-color">
+            <input
+              type="color"
+              value={pageColor || "#0e1116"}
+              onChange={(e) => onPageColor(e.target.value)}
+              aria-label="Color de página personalizado"
+            />
+            <span>Personalizado ({pageColor || "por defecto"})</span>
+            <button type="button" className="link" onClick={onPageColorReset}>
+              Restablecer
+            </button>
+          </div>
+        </div>
 
         <div className="settings-card">
           <h3>Color de acento</h3>
@@ -1400,5 +1641,5 @@ window.ArtistaViews = (function () {
     );
   }
 
-  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile };
+  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView };
 })();
