@@ -171,7 +171,18 @@ function App() {
         localStorage.setItem("aa_theme", t);
       } catch (_) {}
       document.documentElement.dataset.theme = t;
-      return { ...s, theme: t };
+      // Un color de página personalizado escribe --bg/--surface/--text como
+      // estilos inline en <html> y pisa el bloque del tema: sin quitarlo, el
+      // cambio de claro/oscuro no se ve. Al cambiar de tema manda el tema.
+      let pageColor = s.pageColor;
+      if (pageColor) {
+        try {
+          localStorage.removeItem("aa_page");
+        } catch (_) {}
+        applyPageColor("");
+        pageColor = "";
+      }
+      return { ...s, theme: t, pageColor };
     });
 
   // Color de acento personalizable con persistencia.

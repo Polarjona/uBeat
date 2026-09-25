@@ -1723,7 +1723,10 @@ window.ArtistaViews = (function () {
 
         <div className="settings-card">
           <h3>Color de la página</h3>
-          <p>Cambia el fondo de toda la página. No afecta al color de acento.</p>
+          <p>
+            Cambia el fondo de toda la página. No afecta al color de acento. Al cambiar de tema
+            (Claro/Oscuro) se restablece, porque el tema también cambia el fondo.
+          </p>
           <div className="swatches">
             {PAGE_PRESETS.map((c) => (
               <button
