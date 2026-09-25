@@ -53,7 +53,7 @@
   }
 
   // reCAPTCHA v3 (invisible, solo pestaña de login).
-  const RECAPTCHA_SITE_KEY = "6LfTjcwtAAAAAN1dDkNAnwjDk8fEszeAHYvprjJZ";
+  const RECAPTCHA_SITE_KEY = "6LdjFs4tAAAAAMSP7Nf6k2qlXqccKSWAtEL6jtXo";
   let recaptchaLoading = null;
 
   function loadRecaptcha() {
@@ -339,6 +339,33 @@
       const res = await fetch("/api/for-you", { headers: (await this.authHeaders()) });
       const data = await handle(res);
       return data.artists || [];
+    },
+
+    // ---- Plan de suscripción ----
+    async plan() {
+      const res = await fetch("/api/plan", { headers: (await this.authHeaders()) });
+      const data = await handle(res);
+      return data.plan || "free";
+    },
+
+    async upgradePlan() {
+      const res = await fetch("/api/plan/upgrade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({}),
+      });
+      const data = await handle(res);
+      return data.plan || "pro";
+    },
+
+    async cancelPlan() {
+      const res = await fetch("/api/plan/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({}),
+      });
+      const data = await handle(res);
+      return data.plan || "free";
     },
 
     // ---- Social ----

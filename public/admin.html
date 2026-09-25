@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Administración · Artistas App</title>
+<style>
+  :root { --bg:#0d0d10; --panel:#17171c; --panel2:#1e1e25; --line:#2a2a33; --text:#f2f2f5; --muted:#9b9ba7; --accent:#8b5cf6; --ok:#22c55e; --danger:#ef4444; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:15px; margin:0 0 12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .wrap { max-width:1000px; margin:0 auto; padding:24px 16px 64px; }
+  .top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; }
+  .badge { background:var(--accent); color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
+  .kpi { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .kpi b { display:block; font-size:24px; }
+  .kpi span { color:var(--muted); font-size:12px; }
+  input,button,select { font:inherit; }
+  input[type=text],input[type=password],input[type=search] { background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 12px; width:100%; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  button.sm { padding:5px 9px; font-size:12px; }
+  button.danger { background:var(--danger); }
+  button.ok { background:var(--ok); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); font-size:13px; }
+  th { color:var(--muted); font-weight:600; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+  .pill.pro { background:#22c55e33; color:#4ade80; }
+  .pill.free { background:#ffffff14; color:var(--muted); }
+  .tabs { display:flex; gap:6px; margin-bottom:16px; }
+  .tabs button { background:var(--panel2); color:var(--muted); }
+  .tabs button.active { background:var(--accent); color:#fff; }
+  .muted { color:var(--muted); }
+  #loginView { max-width:360px; margin:12vh auto; }
+  #appView { display:none; }
+  .err { color:#f87171; font-size:13px; min-height:18px; }
+  .bar { height:8px; background:var(--accent); border-radius:99px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loginView">
+    <div class="card">
+      <div class="top"><h1>Panel de administración</h1><span class="badge">ADMIN</span></div>
+      <label class="muted">Usuario</label>
+      <input type="text" id="lgUser" autocomplete="username" />
+      <label class="muted" style="display:block;margin-top:10px">Contraseña</label>
+      <input type="password" id="lgPass" autocomplete="current-password" />
+      <div class="err" id="lgErr"></div>
+      <button id="lgBtn" style="width:100%">Entrar</button>
+    </div>
+  </div>
+
+  <div id="appView">
+    <div class="top">
+      <h1>Administración <span class="badge">ADMIN</span></h1>
+      <div class="row">
+        <button class="ghost sm" id="refreshBtn">Actualizar</button>
+        <button class="ghost sm" id="logoutBtn">Salir</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="active" data-tab="stats">Estadísticas</button>
+      <button data-tab="users">Usuarios</button>
+    </div>
+
+    <div id="tabStats">
+      <div class="card">
+        <h2>Estadísticas generales</h2>
+        <div class="kpis" id="kpis"></div>
+      </div>
+      <div class="card">
+        <h2>Artistas más gustados</h2>
+        <table><thead><tr><th>#</th><th>Artista</th><th>Likes</th></tr></thead><tbody id="topLikes"></tbody></table>
+      </div>
+    </div>
+
+    <div id="tabUsers" style="display:none">
+      <div class="card">
+        <h2>Usuarios</h2>
+        <div class="row" style="margin-bottom:12px">
+          <input type="search" id="userSearch" placeholder="Buscar por nombre, email o uid…" style="flex:1;min-width:220px" />
+          <button id="userSearchBtn">Buscar</button>
+        </div>
+        <div class="muted" id="userCount"></div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Email</th><th>Plan</th><th>Creado</th><th></th></tr></thead>
+          <tbody id="userRows"></tbody>
+        </table>
+        <div class="row" style="margin-top:12px">
+          <button class="ghost sm" id="prevBtn">← Anterior</button>
+          <span class="muted" id="pageInfo"></span>
+          <button class="ghost sm" id="nextBtn">Siguiente →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var token = localStorage.getItem("adminToken") || "";
+  var offset = 0, limit = 20, search = "";
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function api(method, url, body) {
+    return fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json", "x-admin-token": token },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      if (r.status === 401 && url.indexOf("/login") === -1) { showLogin(); throw new Error("Sesión caducada."); }
+      return r.json().then(function (j) {
+        if (!r.ok || j.ok === false) throw new Error(j.error || "Error " + r.status);
+        return j;
+      });
+    });
+  }
+
+  function showLogin() {
+    token = "";
+    localStorage.removeItem("adminToken");
+    $("appView").style.display = "none";
+    $("loginView").style.display = "block";
+  }
+
+  function showApp() {
+    $("loginView").style.display = "none";
+    $("appView").style.display = "block";
+    loadStats();
+    loadUsers();
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function loadStats() {
+    api("GET", "/api/admin/stats").then(function (j) {
+      var s = j.stats;
+      var kpis = [
+        ["Usuarios", s.users],
+        ["Artistas", s.artists],
+        ["Likes", s.likes],
+        ["Escuchas (song_likes)", s.songLikes],
+        ["Puntuaciones", s.ratings],
+        ["Playlists", s.playlists],
+        ["Amistades", s.friendships],
+        ["Suscripciones", s.subscriptions],
+        ["Plan PRO", s.plans.pro],
+        ["Plan gratuito", s.plans.free]
+      ];
+      $("kpis").innerHTML = kpis.map(function (k) {
+        return '<div class="kpi"><b>' + esc(k[1]) + "</b><span>" + esc(k[0]) + "</span></div>";
+      }).join("");
+      $("topLikes").innerHTML = (s.topLikes || []).length
+        ? s.topLikes.map(function (t, i) {
+            return "<tr><td>" + (i + 1) + "</td><td>" + esc(t.name) + "</td><td>" + esc(t.likes) + "</td></tr>";
+          }).join("")
+        : '<tr><td colspan="3" class="muted">Sin datos.</td></tr>';
+    }).catch(function (e) { $("kpis").innerHTML = '<div class="muted">' + esc(e.message) + "</div>"; });
+  }
+
+  function loadUsers() {
+    api("GET", "/api/admin/users?offset=" + offset + "&limit=" + limit + "&search=" + encodeURIComponent(search))
+      .then(function (j) {
+        $("userCount").textContent = j.total + " usuario(s)";
+        $("pageInfo").textContent = j.total ? (offset + 1) + "–" + Math.min(offset + limit, j.total) + " de " + j.total : "0";
+        $("prevBtn").disabled = offset === 0;
+        $("nextBtn").disabled = offset + limit >= j.total;
+        $("userRows").innerHTML = j.users.length
+          ? j.users.map(function (u) {
+              return "<tr><td>" + esc(u.name) + "</td><td>" + esc(u.email) +
+                '</td><td><span class="pill ' + (u.plan === "pro" ? "pro" : "free") + '">' +
+                (u.plan === "pro" ? "PRO" : "Gratuito") + "</span></td><td class=\"muted\">" +
+                esc(String(u.created).slice(0, 10)) + "</td><td>" +
+                '<button class="sm ' + (u.plan === "pro" ? "ghost" : "ok") + '" data-uid="' + esc(u.uid) +
+                '" data-plan="' + (u.plan === "pro" ? "free" : "pro") + '">' +
+                (u.plan === "pro" ? "Pasar a gratuito" : "Hacer PRO") + "</button> " +
+                '<button class="sm danger" data-del="' + esc(u.uid) + '" data-name="' + esc(u.name) + '">Eliminar</button>' +
+                "</td></tr>";
+            }).join("")
+          : '<tr><td colspan="5" class="muted">Sin resultados.</td></tr>';
+      })
+      .catch(function (e) { $("userRows").innerHTML = '<tr><td colspan="5" class="muted">' + esc(e.message) + "</td></tr>"; });
+  }
+
+  $("userRows").addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.uid) {
+      if (!confirm("¿Cambiar el plan de este usuario a " + b.dataset.plan + "?")) return;
+      api("POST", "/api/admin/plan", { uid: b.dataset.uid, plan: b.dataset.plan })
+        .then(function () { loadUsers(); loadStats(); })
+        .catch(function (e2) { alert(e2.message); });
+    } else if (b.dataset.del) {
+      if (!confirm('¿Eliminar definitivamente a "' + b.dataset.name + '"? Se borran sus datos.')) return;
+      api("DELETE", "/api/admin/users/" + encodeURIComponent(b.dataset.del))
+        .then(function () { loadUsers(); loadStats(); })
+        .catch(function (e2) { alert(e2.message); });
+    }
+  });
+
+  $("lgBtn").addEventListener("click", doLogin);
+  $("lgPass").addEventListener("keydown", function (e) { if (e.key === "Enter") doLogin(); });
+  function doLogin() {
+    $("lgErr").textContent = "";
+    fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: $("lgUser").value, password: $("lgPass").value })
+    }).then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }); })
+      .then(function (o) {
+        if (!o.r.ok || !o.j.token) throw new Error(o.j.error || "Error de acceso.");
+        token = o.j.token;
+        localStorage.setItem("adminToken", token);
+        showApp();
+      })
+      .catch(function (e) { $("lgErr").textContent = e.message; });
+  }
+
+  $("logoutBtn").addEventListener("click", showLogin);
+  $("refreshBtn").addEventListener("click", function () { loadStats(); loadUsers(); });
+  $("userSearchBtn").addEventListener("click", function () { search = $("userSearch").value.trim(); offset = 0; loadUsers(); });
+  $("userSearch").addEventListener("keydown", function (e) { if (e.key === "Enter") { search = $("userSearch").value.trim(); offset = 0; loadUsers(); } });
+  $("prevBtn").addEventListener("click", function () { offset = Math.max(0, offset - limit); loadUsers(); });
+  $("nextBtn").addEventListener("click", function () { offset += limit; loadUsers(); });
+
+  var tabBtns = document.querySelectorAll(".tabs button");
+  tabBtns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      tabBtns.forEach(function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      $("tabStats").style.display = b.dataset.tab === "stats" ? "block" : "none";
+      $("tabUsers").style.display = b.dataset.tab === "users" ? "block" : "none";
+    });
+  });
+
+  if (token) showApp(); else showLogin();
+})();
+</script>
+</body>
+</html>

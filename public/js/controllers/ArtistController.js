@@ -128,7 +128,48 @@
       if (view === "discover") {
         // El feed tiene su propio audio: cierra la barra para no solapar sonido.
         if (getState().barQueue.length) closeBar();
-        if (!getState().discover.length) loadDiscover(true);
+        // Solo plan PRO: sin él, la vista muestra el paywall (PlanGate).
+        if (getState().plan === "pro" && !getState().discover.length) loadDiscover(true);
+      }
+    }
+
+    // ---- Plan de suscripción ----
+    async function loadPlan() {
+      try {
+        const plan = await model.plan();
+        setState((s) => ({ ...s, plan }));
+        return plan;
+      } catch (_) {
+        setState((s) => ({ ...s, plan: "free" }));
+        return "free";
+      }
+    }
+
+    async function upgradePlan() {
+      setState((s) => ({ ...s, savingPlan: true, planError: "" }));
+      try {
+        const plan = await model.upgradePlan();
+        setState((s) => ({ ...s, plan, savingPlan: false, planModal: false }));
+        // Con PRO ya se pueden cargar las secciones que antes estaban cortadas.
+        loadForYou();
+        loadSocial();
+        loadActivity();
+        return true;
+      } catch (err) {
+        setState((s) => ({ ...s, savingPlan: false, planError: err.message }));
+        return false;
+      }
+    }
+
+    async function cancelPlan() {
+      setState((s) => ({ ...s, savingPlan: true, planError: "" }));
+      try {
+        const plan = await model.cancelPlan();
+        setState((s) => ({ ...s, plan, savingPlan: false, forYou: [], friends: [], pendingIn: [], pendingOut: [], activity: [] }));
+        return true;
+      } catch (err) {
+        setState((s) => ({ ...s, savingPlan: false, planError: err.message }));
+        return false;
       }
     }
 
@@ -137,17 +178,22 @@
       // Firebase avisa solo de los cambios (incluido el arranque).
       model.onSession(async (user, likeIds, songLikeIds) => {
         if (!user) {
-          setState((s) => ({ ...s, user: null, likeIds: [], songLikeIds: [], forYou: [], friends: [], pendingIn: [], pendingOut: [], activity: [] }));
+          setState((s) => ({ ...s, user: null, plan: "free", likeIds: [], songLikeIds: [], forYou: [], friends: [], pendingIn: [], pendingOut: [], activity: [] }));
           return;
         }
         setState((s) => ({ ...s, user }));
         if (likeIds && songLikeIds) {
           setState((s) => ({ ...s, likeIds, songLikeIds }));
         }
-        loadForYou();
-        loadSocial();
-        loadActivity();
+        // El plan decide qué se puede cargar: primero lo consultamos para
+        // no disparar peticiones que devolverían 403.
+        const plan = await loadPlan();
         loadRatings();
+        if (plan === "pro") {
+          loadForYou();
+          loadSocial();
+          loadActivity();
+        }
       });
     }
 
@@ -655,10 +701,10 @@
       setState((s) => ({ ...s, cookies: null, cookiesDismissed: false }));
     }
 
-    // ---- Para ti (ponderado) ----
+    // ---- Para ti (ponderado, solo plan PRO) ----
     async function loadForYou() {
-      const { user } = getState();
-      if (!user) {
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") {
         setState((s) => ({ ...s, forYou: [] }));
         return;
       }
@@ -676,8 +722,8 @@
     // Descubrir) antes, se cancela el temporizador y no se suma.
     let playLogTimer = null;
     async function trackStarted(info) {
-      const { user } = getState();
-      if (!user) return;
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") return;
       if (playLogTimer) clearTimeout(playLogTimer);
       playLogTimer = setTimeout(async () => {
         playLogTimer = null;
@@ -691,8 +737,8 @@
 
     // ---- Social ----
     async function loadSocial() {
-      const { user } = getState();
-      if (!user) {
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") {
         setState((s) => ({ ...s, friends: [], pendingIn: [], pendingOut: [] }));
         return;
       }
@@ -761,8 +807,8 @@
     }
 
     async function loadActivity() {
-      const { user } = getState();
-      if (!user) {
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") {
         setState((s) => ({ ...s, activity: [] }));
         return;
       }
@@ -856,6 +902,9 @@
       playDiscover,
       closeProfileCard,
       loadForYou,
+      loadPlan,
+      upgradePlan,
+      cancelPlan,
       trackStarted,
       loadSocial,
       sendFriendRequest,

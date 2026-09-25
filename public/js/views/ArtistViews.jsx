@@ -169,7 +169,7 @@ window.ArtistaViews = (function () {
   }
 
   // Menú lateral: Inicio / favoritos / playlists.
-  function SideMenu({ open, view, user, favCount, songFavCount, plCount, onGo, onClose, onUsers, onLogout, onOpenMyProfile, onGoSettings, social, onAddFriend, onRespondFriend, onRemoveFriend, onOpenFriend }) {
+  function SideMenu({ open, view, user, plan, favCount, songFavCount, plCount, onGo, onClose, onUsers, onLogout, onOpenMyProfile, onGoSettings, social, onAddFriend, onRespondFriend, onRemoveFriend, onOpenFriend }) {
     const [socialOpen, setSocialOpen] = useState(true);
     const [friendEmail, setFriendEmail] = useState("");
     const sendInvite = (e) => {
@@ -232,6 +232,7 @@ window.ArtistaViews = (function () {
             {user && plCount > 0 ? ` (${plCount})` : ""}
           </button>
           </div>
+          {plan === "pro" ? (
           <div className="drawer-social">
             <button
               type="button"
@@ -293,6 +294,18 @@ window.ArtistaViews = (function () {
                 )}
               </div>
           </div>
+          ) : (
+          <div className="drawer-social drawer-social-locked">
+            <button type="button" className="drawer-item social-head" onClick={onGoSettings}>
+              <span>Social</span>
+              <span className="pill-pro">PRO</span>
+            </button>
+            <div className="social-body open">
+              <p className="muted">Añadir amigos y ver su actividad es una función del plan PRO.</p>
+              <button type="button" className="btn" onClick={onGoSettings}>Ver plan</button>
+            </div>
+          </div>
+          )}
           <div className="drawer-foot">
             {user ? (
               <React.Fragment>
@@ -1645,10 +1658,68 @@ window.ArtistaViews = (function () {
     pageColor,
     onPageColor,
     onPageColorReset,
+    plan,
+    planModal,
+    savingPlan,
+    planError,
+    onShowCheckout,
+    onHideCheckout,
+    onUpgrade,
+    onCancel,
   }) {
+    const isPro = plan === "pro";
     return (
       <section>
         <h2 className="section-title">Ajustes</h2>
+
+        <div className="settings-card">
+          <div className="plan-head">
+            <div>
+              <h3>Suscripción</h3>
+              <p>Tu plan actual: <span className={"pill-pro" + (isPro ? "" : " free")}>{isPro ? "PRO" : "Gratuito"}</span></p>
+            </div>
+          </div>
+          <div className="plan-compare">
+            <div className={"plan-box" + (isPro ? "" : " active")}>
+              <strong>Gratuito</strong>
+              <span className="plan-price">0 €</span>
+              <ul>
+                <li>Catálogo, búsqueda y filtros</li>
+                <li>Favoritos, playlists y valoraciones</li>
+                <li>Gráficos y listas populares</li>
+                <li className="no">Sin Social (amigos)</li>
+                <li className="no">Sin algoritmo (Para ti / Descubrir)</li>
+              </ul>
+            </div>
+            <div className={"plan-box pro" + (isPro ? " active" : "")}>
+              <strong>PRO <span className="pill-pro">Recomendado</span></strong>
+              <span className="plan-price">7,99 €<small>/mes</small></span>
+              <ul>
+                <li>Todo lo del plan gratuito</li>
+                <li>Social: amigos y su actividad</li>
+                <li>Algoritmo: Para ti y Descubrir</li>
+                <li>Seguimiento de escuchas</li>
+                <li>Nuevas funciones primero</li>
+              </ul>
+            </div>
+          </div>
+          {planError ? <div className="error sm">{planError}</div> : null}
+          {isPro ? (
+            <div className="row-actions">
+              <button type="button" className="btn ghost" onClick={onCancel} disabled={savingPlan}>
+                {savingPlan ? "Procesando…" : "Cancelar suscripción"}
+              </button>
+            </div>
+          ) : user ? (
+            <div className="row-actions">
+              <button type="button" className="btn" onClick={onShowCheckout}>Hazte PRO — 7,99 €/mes</button>
+            </div>
+          ) : (
+            <div className="row-actions">
+              <button type="button" className="btn" onClick={onLogin}>Inicia sesión para hacerte PRO</button>
+            </div>
+          )}
+        </div>
 
         <div className="settings-card">
           <h3>Color de la página</h3>
@@ -1765,6 +1836,66 @@ window.ArtistaViews = (function () {
             Configurar cookies
           </button>
         </div>
+
+        {planModal ? (
+          <div className="modal-scrim" onClick={onHideCheckout}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Hacerse PRO">
+              <div className="modal-head">
+                <strong>Hazte PRO</strong>
+                <button type="button" onClick={onHideCheckout} aria-label="Cerrar">✕</button>
+              </div>
+              <p className="muted">Demo de pago simulado: no se cobra nada de verdad.</p>
+              <div className="checkout-summary">
+                <span>Plan PRO · suscripción mensual</span>
+                <strong>7,99 €/mes</strong>
+              </div>
+              <label className="field">
+                <span>Número de tarjeta</span>
+                <input type="text" inputMode="numeric" placeholder="4242 4242 4242 4242" disabled={savingPlan} />
+              </label>
+              <div className="row-actions">
+                <button type="button" className="btn ghost" onClick={onHideCheckout} disabled={savingPlan}>
+                  Volver
+                </button>
+                <button type="button" className="btn" onClick={onUpgrade} disabled={savingPlan}>
+                  {savingPlan ? "Procesando…" : "Pagar 7,99 €"}
+                </button>
+              </div>
+              {planError ? <div className="error sm">{planError}</div> : null}
+            </div>
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  // Paywall de Descubrir (y cualquier vista PRO) para plan gratuito/invitado.
+  function PlanGate({ user, onLogin, onSettings }) {
+    return (
+      <section className="plan-gate">
+        <span className="pill-pro big">PLAN PRO</span>
+        <h2>Desbloquea Descubrir y Social</h2>
+        <p className="muted">
+          Con el plan gratuito tienes el catálogo completo, favoritos, playlists y gráficos.
+          El feed <strong>Descubrir</strong>, la recomendación <strong>Para ti</strong> y el
+          <strong> Social</strong> (amigos) son funciones del plan PRO.
+        </p>
+        <ul className="gate-list">
+          <li>Feed vertical de canciones (estilo Shorts)</li>
+          <li>Recomendaciones “Para ti” con motivos</li>
+          <li>Amigos, solicitudes y su actividad</li>
+          <li>Seguimiento de escuchas</li>
+        </ul>
+        <div className="row-actions center">
+          {user ? (
+            <button type="button" className="btn big" onClick={onSettings}>Hazte PRO — 7,99 €/mes</button>
+          ) : (
+            <React.Fragment>
+              <button type="button" className="btn big" onClick={onLogin}>Iniciar sesión</button>
+              <button type="button" className="btn ghost" onClick={onSettings}>Ver planes</button>
+            </React.Fragment>
+          )}
+        </div>
       </section>
     );
   }
@@ -1803,5 +1934,5 @@ window.ArtistaViews = (function () {
     );
   }
 
-  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView };
+  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate };
 })();

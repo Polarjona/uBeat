@@ -6,7 +6,8 @@
  *    y desde Postman.
  *  - Flujo de búsqueda (requisito principal):
  *      1. Busca el nombre en Firestore (colección "artists").
- *      2. Si NO existe -> llama a TheAudioDB, guarda el resultado
+ *      2. Si NO existe -> llama a TheAudioDB (si TheAudioDB no lo tiene,
+ *         usa el buscador de artistas de iTunes), guarda el resultado
  *         en Firestore automáticamente y lo devuelve.
  *      3. Si no existe en ningún sitio -> 404.
  *
@@ -16,6 +17,7 @@
 
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 
@@ -106,23 +108,105 @@ function loadSeed() {
   }
 }
 
+// Fuente principal: TheAudioDB (como siempre). Si TheAudioDB no tiene al
+// artista (p. ej. "Ado") o su primer resultado no se parece al nombre
+// buscado, se usa iTunes (misma fuente que los gráficos y las previews)
+// para no dejar al artista fuera del catálogo.
 async function fetchFromAudioDb(name) {
-  const url = `https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(
+  const url = `https://www.theaudiodb.com/api/v1/json/123/search.php?s=${encodeURIComponent(
     name
   )}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`TheAudioDB HTTP ${res.status}`);
-  const data = await res.json();
-  if (!data.artists) return [];
-  return data.artists.map(normalizeAudioDbArtist);
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.artists && data.artists.length) {
+        const list = data.artists.map(normalizeAudioDbArtist);
+        if (list.some((a) => similar(a.name, name))) return list;
+      }
+    }
+  } catch (_) {}
+  return fetchFromItunesArtist(name);
+}
+
+function similar(name, q) {
+  const n = norm(name);
+  const t = norm(q);
+  return n === t || n.includes(t) || t.includes(n);
+}
+
+async function fetchFromItunesArtist(name) {
+  try {
+    const r = await fetch(
+      `https://itunes.apple.com/search?term=${encodeURIComponent(
+        name
+      )}&entity=musicArtist&limit=3`
+    );
+    const j = await r.json();
+    const hits = (j.results || []).filter((x) => similar(x.artistName, name));
+    if (!hits.length) return [];
+    const exact = hits.filter((x) => norm(x.artistName) === norm(name));
+    const selected = [exact[0] || hits[0]];
+    let image = "";
+    try {
+      const l = await fetch(
+        `https://itunes.apple.com/lookup?id=${selected[0].artistId}&entity=album&limit=1`
+      );
+      const lj = await l.json();
+      const art = (lj.results || []).find((x) => x.artworkUrl100);
+      if (art) image = art.artworkUrl100.replace("100x100bb", "600x600bb");
+    } catch (_) {}
+    return selected.map((x) => ({
+      id: String(x.artistId),
+      name: x.artistName,
+      nameLower: norm(x.artistName),
+      genre: x.primaryGenreName || "Desconocido",
+      country: "Desconocido",
+      image,
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch (_) {
+    return [];
+  }
 }
 
 // ---------- Acceso a datos (Modelo servidor) ----------
+// Caché en memoria de TODA la colección: al entrar en la página se
+// disparaban ~5 escaneos completos de "artists" (lista, filtros, charts,
+// Para ti, Descubrir...). TTL de 60 s + deduplicación de la petición en
+// vuelo + invalidación al escribir. El comportamiento no cambia.
+const ARTISTS_TTL_MS = 60e3;
+let artistsCacheDocs = null;
+let artistsCacheAt = 0;
+let artistsCachePending = null;
+
+function invalidateArtistsCache() {
+  artistsCacheDocs = null;
+  artistsCacheAt = 0;
+}
+
+async function allArtistsDocs() {
+  const now = Date.now();
+  if (artistsCacheDocs && now - artistsCacheAt < ARTISTS_TTL_MS) return artistsCacheDocs;
+  if (artistsCachePending) return artistsCachePending;
+  artistsCachePending = (async () => {
+    const snap = await db.collection(COLLECTION).get();
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    artistsCacheDocs = docs;
+    artistsCacheAt = Date.now();
+    artistsCachePending = null;
+    return docs;
+  })().catch((e) => {
+    artistsCachePending = null;
+    throw e;
+  });
+  return artistsCachePending;
+}
+
 // Escanea TODA la colección (116 docs aprox.): así se usan todos los artistas.
 async function searchFirestore(query) {
   const q = norm(query);
-  const snap = await db.collection(COLLECTION).get();
-  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const all = await allArtistsDocs();
   return all.filter((a) => norm(a.name || "").includes(q));
 }
 
@@ -145,14 +229,13 @@ async function saveArtists(artists) {
     );
   }
   await batch.commit();
+  invalidateArtistsCache();
 }
 
 // Devuelve TODOS los artistas de la colección, ordenados A–Z.
 async function listAllFirestore() {
-  const snap = await db.collection(COLLECTION).get();
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
+  const all = await allArtistsDocs();
+  return [...all].sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
 }
 
 // Filtro AND: si se pide país y género, el artista debe cumplir AMBOS.
@@ -169,11 +252,10 @@ function applyAndFilter(artists, { country, genre }) {
 
 // Valores únicos para rellenar el desplegable de filtros.
 async function distinctValues() {
-  const snap = await db.collection(COLLECTION).get();
+  const docs = await allArtistsDocs();
   const cs = new Set();
   const gs = new Set();
-  snap.docs.forEach((d) => {
-    const v = d.data();
+  docs.forEach((v) => {
     if (v.country) cs.add(v.country);
     if (v.genre) gs.add(v.genre);
   });
@@ -284,8 +366,8 @@ app.get("/api/artists/count", async (req, res) => {
   try {
     if (!firestoreReady)
       return res.json({ ok: true, total: loadSeed().length, source: "local-seed" });
-    const snap = await db.collection(COLLECTION).count().get();
-    res.json({ ok: true, total: snap.data().count, source: "firestore" });
+    const docs = await allArtistsDocs();
+    res.json({ ok: true, total: docs.length, source: "firestore" });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -374,8 +456,7 @@ async function chartArtists(storefront, limit = 20) {
     ),
   ];
 
-  const snap = await db.collection(COLLECTION).get();
-  const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const docs = (await allArtistsDocs()).slice();
 
   // Partes de colaboraciones ("A & B", "A, B", "A feat. B"...).
   const splitParts = (nm) =>
@@ -475,6 +556,105 @@ async function meFromUid(uid) {
     return null;
   }
 }
+
+// ---------- Planes de suscripción ----------
+// Colección "subscriptions" (doc id = uid): { plan, source, updatedAt }.
+// Sin documento => plan gratuito (por defecto).
+//   - free: todo excepto Social y el algoritmo (Para ti / Descubrir).
+//   - pro:  7,99 €/mes, acceso total.
+const SUBS_COL = "subscriptions";
+const PRO_PRICE = "7,99 €/mes";
+const planCache = new Map(); // uid -> { at, plan }
+const PLAN_TTL_MS = 30e3;
+
+function invalidatePlan(uid) {
+  planCache.delete(String(uid));
+}
+
+async function getUserPlan(uid) {
+  if (!uid) return "free";
+  const key = String(uid);
+  const hit = planCache.get(key);
+  if (hit && Date.now() - hit.at < PLAN_TTL_MS) return hit.plan;
+  let plan = "free";
+  if (firestoreReady) {
+    try {
+      const d = await db.collection(SUBS_COL).doc(key).get();
+      if (d.exists && d.data() && d.data().plan === "pro") plan = "pro";
+    } catch (_) {}
+  }
+  planCache.set(key, { at: Date.now(), plan });
+  return plan;
+}
+
+async function setUserPlan(uid, plan, source) {
+  const v = plan === "pro" ? "pro" : "free";
+  if (!firestoreReady) return v;
+  await db
+    .collection(SUBS_COL)
+    .doc(String(uid))
+    .set(
+      {
+        uid: String(uid),
+        plan: v,
+        source: source || "admin",
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  invalidatePlan(uid);
+  return v;
+}
+
+// uid si el usuario tiene plan PRO; si no, responde el error y devuelve null.
+async function proUid(req, res) {
+  const uid = await authUid(req);
+  if (!uid) {
+    res.status(401).json({ ok: false, error: "Inicia sesión." });
+    return null;
+  }
+  if ((await getUserPlan(uid)) !== "pro") {
+    res
+      .status(403)
+      .json({ ok: false, error: "Esta función requiere el plan PRO.", code: "plan" });
+    return null;
+  }
+  return uid;
+}
+
+app.get("/api/plan", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const plan = await getUserPlan(uid);
+    res.json({ ok: true, plan, price: PRO_PRICE });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Pago SIMULADO (demo): no hay pasarela real; al confirmar se activa PRO.
+app.post("/api/plan/upgrade", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const plan = await setUserPlan(uid, "pro", "checkout");
+    res.json({ ok: true, plan, price: PRO_PRICE });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/plan/cancel", async (req, res) => {
+  try {
+    const uid = await authUid(req);
+    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const plan = await setUserPlan(uid, "free", "cancel");
+    res.json({ ok: true, plan });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 app.get("/api/me", async (req, res) => {
   try {
@@ -910,17 +1090,18 @@ async function similarIds(artist, allDocs) {
 }
 
 // POST /api/plays {artistId?, trackId?, track?, artist?} -> +1 escucha
+// (solo plan PRO: alimenta el algoritmo).
 app.post("/api/plays", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const uid = await proUid(req, res);
+    if (!uid) return;
     const b = req.body || {};
     let artistId = String(b.artistId || "").trim();
     if (!artistId && b.artist) {
       const n = norm(b.artist);
-      const s = await db.collection(COLLECTION).get();
-      const hit = s.docs.find((d) => norm(d.data().name) === n);
-      if (hit) artistId = hit.id;
+      const all = await allArtistsDocs();
+      const hit = all.find((a) => norm(a.name) === n);
+      if (hit) artistId = String(hit.id);
     }
     if (!artistId) return res.json({ ok: true, logged: false });
     const ref = db.collection(TASTE_COL).doc(`${uid}_${artistId}`);
@@ -935,13 +1116,12 @@ app.post("/api/plays", async (req, res) => {
   }
 });
 
-// GET /api/for-you -> rail ponderado con motivos
+// GET /api/for-you -> rail ponderado con motivos (solo plan PRO)
 app.get("/api/for-you", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
-    const snap = await db.collection(COLLECTION).get();
-    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const uid = await proUid(req, res);
+    if (!uid) return;
+    const all = await allArtistsDocs();
     const byId = new Map(all.map((a) => [String(a.id), a]));
     const [likesS, tasteS] = await Promise.all([
       db.collection(LIKES_COL).where("uid", "==", uid).get(),
@@ -1012,8 +1192,7 @@ async function discoverArtists(uid) {
   const key = uid || "guest";
   const hit = discoverRankCache.get(key);
   if (hit && Date.now() - hit.at < DISCOVER_TTL_MS) return hit.list;
-  const snap = await db.collection(COLLECTION).get();
-  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const all = await allArtistsDocs();
   let list = shuffle(all);
   if (uid) {
     const [likesS, tasteS] = await Promise.all([
@@ -1114,7 +1293,8 @@ function countSongs(groups) {
 
 app.get("/api/discover", async (req, res) => {
   try {
-    const uid = await authUid(req);
+    const uid = await proUid(req, res);
+    if (!uid) return;
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const ranked = await discoverArtists(uid);
     if (!ranked.length) return res.json({ ok: true, songs: [], hasMore: false, offset: 0 });
@@ -1175,11 +1355,11 @@ async function friendStatus(uid, other) {
   return d.exists ? d.data() : null;
 }
 
-// Solicitud por email (se resuelve a uid de Firebase Auth).
+// Solicitud por email (se resuelve a uid de Firebase Auth). Solo plan PRO.
 app.post("/api/friends/request", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const uid = await proUid(req, res);
+    if (!uid) return;
     const email = String(req.body.email || "").trim().toLowerCase();
     if (!email) return res.status(400).json({ ok: false, error: "Falta el email." });
     let target;
@@ -1209,11 +1389,11 @@ app.post("/api/friends/request", async (req, res) => {
   }
 });
 
-// Aceptar (accept:true) o rechazar solicitud.
+// Aceptar (accept:true) o rechazar solicitud. Solo plan PRO.
 app.post("/api/friends/respond", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const uid = await proUid(req, res);
+    if (!uid) return;
     const from = String(req.body.from || "");
     const ref = db.collection(FRIENDS_COL).doc(pairId(uid, from));
     const d = await ref.get();
@@ -1230,11 +1410,11 @@ app.post("/api/friends/respond", async (req, res) => {
   }
 });
 
-// Eliminar amistad.
+// Eliminar amistad. Solo plan PRO.
 app.delete("/api/friends/:uid", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const uid = await proUid(req, res);
+    if (!uid) return;
     await db.collection(FRIENDS_COL).doc(pairId(uid, req.params.uid)).delete();
     res.json({ ok: true });
   } catch (err) {
@@ -1242,11 +1422,11 @@ app.delete("/api/friends/:uid", async (req, res) => {
   }
 });
 
-// Amigos + solicitudes.
+// Amigos + solicitudes. Solo plan PRO.
 app.get("/api/friends", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const uid = await proUid(req, res);
+    if (!uid) return;
     const s1 = await db.collection(FRIENDS_COL).where("a", "==", uid).get();
     const s2 = await db.collection(FRIENDS_COL).where("b", "==", uid).get();
     const all = [...s1.docs, ...s2.docs].map((d) => d.data());
@@ -1273,11 +1453,11 @@ app.get("/api/friends", async (req, res) => {
   }
 });
 
-// Perfil (amigos aceptados, o uno mismo).
+// Perfil (amigos aceptados, o uno mismo). Solo plan PRO.
 app.get("/api/friends/:uid/profile", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
+    const uid = await proUid(req, res);
+    if (!uid) return;
     if (String(req.params.uid) !== String(uid)) {
       const f = await friendStatus(uid, req.params.uid);
       if (!f || f.status !== "accepted")
@@ -1302,8 +1482,8 @@ app.get("/api/friends/:uid/profile", async (req, res) => {
       .map((d) => ({ artistId: String(d.data().artistId), plays: Number(d.data().plays || 0) }))
       .sort((a, b) => b.plays - a.plays)
       .slice(0, 5);
-    const snap = await db.collection(COLLECTION).get();
-    const byId = new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+    const allDocs = await allArtistsDocs();
+    const byId = new Map(allDocs.map((d) => [String(d.id), d]));
     res.json({
       ok: true,
       user: who,
@@ -1316,14 +1496,14 @@ app.get("/api/friends/:uid/profile", async (req, res) => {
   }
 });
 
-// Actividad reciente de amigos para el rail social.
+// Actividad reciente de amigos para el rail social. Solo plan PRO.
 app.get("/api/friends/activity", async (req, res) => {
   try {
-    const uid = await authUid(req);
-    if (!uid) return res.status(401).json({ ok: false, error: "Inicia sesión." });
-    const s1 = await db.collection(FRIENDS_COL).where("a", "==", uid).get();
+    const uid = await proUid(req, res);
+    if (!uid) return;
+    const snap = await db.collection(FRIENDS_COL).where("a", "==", uid).get();
     const s2 = await db.collection(FRIENDS_COL).where("b", "==", uid).get();
-    const friends = [...s1.docs, ...s2.docs]
+    const friends = [...snap.docs, ...s2.docs]
       .map((d) => d.data())
       .filter((f) => f.status === "accepted")
       .map((f) => (f.a === uid ? f.b : f.a))
@@ -1332,18 +1512,23 @@ app.get("/api/friends/activity", async (req, res) => {
     const names = {};
     const r = await getAuth().getUsers(friends.map((x) => ({ uid: x })));
     r.users.forEach((u) => (names[u.uid] = u.displayName || String(u.email || "").split("@")[0]));
-    const snap = await db.collection(COLLECTION).get();
-    const byId = new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+    const allArtists = await allArtistsDocs();
+    const byId = new Map(allArtists.map((d) => [String(d.id), d]));
     const items = [];
-    for (const fid of friends) {
-      const fname = names[fid] || "Un amigo";
-      const [la, ls, ts] = await Promise.all([
-        db.collection(LIKES_COL).where("uid", "==", fid).get(),
-        db.collection(SONGLIKES_COL).where("uid", "==", fid).get(),
-        db.collection(TASTE_COL).where("uid", "==", fid).get(),
-      ]);
-      const byTime = (a, b) =>
-        String(b.createdAt || b.updatedAt || "").localeCompare(String(a.createdAt || a.updatedAt || ""));
+    // Las consultas de TODOS los amigos se lanzan en paralelo (antes: en serie).
+    const rows = await Promise.all(
+      friends.map(async (fid) => {
+        const [la, ls, ts] = await Promise.all([
+          db.collection(LIKES_COL).where("uid", "==", fid).get(),
+          db.collection(SONGLIKES_COL).where("uid", "==", fid).get(),
+          db.collection(TASTE_COL).where("uid", "==", fid).get(),
+        ]);
+        return { fid, fname: names[fid] || "Un amigo", la, ls, ts };
+      })
+    );
+    const byTime = (a, b) =>
+      String(b.createdAt || b.updatedAt || "").localeCompare(String(a.createdAt || a.updatedAt || ""));
+    for (const { fname, la, ls, ts } of rows) {
       la.docs.map((d) => d.data()).sort(byTime).slice(0, 3).forEach((v) => {
         const a = byId.get(String(v.artistId));
         if (a) items.push({ kind: "artist", at: v.createdAt || "", friend: fname, caption: `Le gusta a ${fname}`, ...a });
@@ -1427,9 +1612,217 @@ app.post("/api/artists/import", async (req, res) => {
   }
 });
 
+// ---------- Panel de administración ----------
+// Credenciales: secrets.json {"adminUser","adminPass"} o env ADMIN_USER/ADMIN_PASS.
+const ADMIN_TOKEN_TTL_MS = 12 * 3600e3;
+const adminTokens = new Map(); // token -> expiresAt
+const adminLoginTries = new Map(); // ip -> { at, n }
+
+function adminCredentials() {
+  let u = process.env.ADMIN_USER || "admin";
+  let p = process.env.ADMIN_PASS || "P@ssw0rd";
+  try {
+    const s = require(SECRETS_PATH);
+    if (s && s.adminUser) u = s.adminUser;
+    if (s && s.adminPass) p = s.adminPass;
+  } catch (_) {}
+  return { u, p };
+}
+
+function adminOk(req) {
+  const t = req.get("x-admin-token");
+  const exp = t && adminTokens.get(t);
+  if (!exp) return false;
+  if (exp < Date.now()) {
+    adminTokens.delete(t);
+    return false;
+  }
+  return true;
+}
+
+function pruneAdminTokens() {
+  const now = Date.now();
+  for (const [t, exp] of adminTokens) if (exp < now) adminTokens.delete(t);
+}
+
+function adminRateLimited(req) {
+  const ip = req.ip || req.socket.remoteAddress || "?";
+  const now = Date.now();
+  let r = adminLoginTries.get(ip);
+  if (!r || now - r.at > 5 * 60e3) {
+    r = { at: now, n: 0 };
+    adminLoginTries.set(ip, r);
+  }
+  r.n += 1;
+  return r.n > 5;
+}
+
+app.post("/api/admin/login", (req, res) => {
+  try {
+    if (adminRateLimited(req))
+      return res
+        .status(429)
+        .json({ ok: false, error: "Demasiados intentos. Espera 5 minutos." });
+    const { u, p } = adminCredentials();
+    const user = String((req.body && req.body.user) || "");
+    const pass = String((req.body && req.body.password) || "");
+    if (user !== u || pass !== p)
+      return res.status(401).json({ ok: false, error: "Credenciales incorrectas." });
+    const token = crypto.randomBytes(24).toString("hex");
+    adminTokens.set(token, Date.now() + ADMIN_TOKEN_TTL_MS);
+    pruneAdminTokens();
+    res.json({ ok: true, token });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.use("/api/admin", (req, res, next) => {
+  if (!adminOk(req)) return res.status(401).json({ ok: false, error: "No autorizado." });
+  next();
+});
+
+app.get("/api/admin/stats", async (req, res) => {
+  try {
+    if (!firestoreReady)
+      return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    const [users, docs, likesS, subsS, frS, songS, ratS, plS] = await Promise.all([
+      firestoreReady ? getAuth().listUsers(1000) : { users: [] },
+      allArtistsDocs(),
+      db.collection(LIKES_COL).count().get(),
+      db.collection(SUBS_COL).count().get(),
+      db.collection(FRIENDS_COL).count().get(),
+      db.collection(SONGLIKES_COL).count().get(),
+      db.collection(RATINGS_COL).count().get(),
+      db.collection(PLAYLISTS_COL).count().get(),
+    ]);
+    const likeRows = (await db.collection(LIKES_COL).limit(5000).get()).docs.map((d) => d.data());
+    const byArtist = {};
+    likeRows.forEach((r) => (byArtist[String(r.artistId)] = (byArtist[String(r.artistId)] || 0) + 1));
+    const byName = new Map(docs.map((d) => [String(d.id), d.name]));
+    const topLikes = Object.entries(byArtist)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([id, n]) => ({ id, name: byName.get(id) || id, likes: n }));
+    const plans = { free: 0, pro: 0 };
+    (await db.collection(SUBS_COL).get()).docs.forEach((d) => {
+      const p = d.data().plan === "pro" ? "pro" : "free";
+      plans[p]++;
+    });
+    res.json({
+      ok: true,
+      stats: {
+        users: users.users ? users.users.length : 0,
+        artists: docs.length,
+        likes: likesS.data().count,
+        songLikes: songS.data().count,
+        ratings: ratS.data().count,
+        playlists: plS.data().count,
+        friendships: frS.data().count,
+        subscriptions: subsS.data().count,
+        plans,
+        topLikes,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    const search = String(req.query.search || "").trim().toLowerCase();
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    let list = [];
+    if (firestoreReady) {
+      const page = await getAuth().listUsers(1000);
+      list = page.users;
+    }
+    const subs = new Map();
+    const subSnap = await db.collection(SUBS_COL).get();
+    subSnap.docs.forEach((d) => subs.set(d.id, d.data().plan === "pro" ? "pro" : "free"));
+    let rows = list.map((u) => ({
+      uid: u.uid,
+      name: u.displayName || String(u.email || "").split("@")[0],
+      email: u.email || "",
+      created: u.metadata && u.metadata.creationTime ? u.metadata.creationTime : "",
+      plan: subs.get(u.uid) || "free",
+    }));
+    if (search)
+      rows = rows.filter(
+        (r) => r.name.toLowerCase().includes(search) || r.email.toLowerCase().includes(search) || r.uid.includes(search)
+      );
+    const total = rows.length;
+    rows = rows.slice(offset, offset + limit);
+    res.json({ ok: true, users: rows, total, offset, limit });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/admin/plan", async (req, res) => {
+  try {
+    const uid = String((req.body && req.body.uid) || "");
+    const plan = String((req.body && req.body.plan) || "");
+    if (!uid) return res.status(400).json({ ok: false, error: "Falta el uid." });
+    if (plan !== "free" && plan !== "pro")
+      return res.status(400).json({ ok: false, error: "Plan inválido." });
+    if (!firestoreReady)
+      return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    await setUserPlan(uid, plan, "admin");
+    res.json({ ok: true, uid, plan });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete("/api/admin/users/:uid", async (req, res) => {
+  try {
+    const uid = String(req.params.uid);
+    if (!firestoreReady)
+      return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    try {
+      await getAuth().deleteUser(uid);
+    } catch (e) {
+      if (e.code !== "auth/user-not-found") throw e;
+    }
+    const deletes = [];
+    for (const col of [LIKES_COL, SONGLIKES_COL, TASTE_COL, RATINGS_COL, PLAYLISTS_COL, SUBS_COL]) {
+      deletes.push(
+        db
+          .collection(col)
+          .where("uid", "==", uid)
+          .get()
+          .then((s) => Promise.all(s.docs.map((d) => d.ref.delete())))
+      );
+    }
+    deletes.push(
+      db
+        .collection(FRIENDS_COL)
+        .where("a", "==", uid)
+        .get()
+        .then((s) => Promise.all(s.docs.map((d) => d.ref.delete())))
+    );
+    deletes.push(
+      db
+        .collection(FRIENDS_COL)
+        .where("b", "==", uid)
+        .get()
+        .then((s) => Promise.all(s.docs.map((d) => d.ref.delete())))
+    );
+    await Promise.all(deletes);
+    invalidatePlan(uid);
+    res.json({ ok: true, uid });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // SPA fallback
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ ok: false, error: "No encontrado" });
+  if (req.path === "/admin") return res.sendFile(path.join(__dirname, "public", "admin.html"));
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 

@@ -7,63 +7,111 @@
   "item": [
     {
       "name": "Salud",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/health" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/health"
+      }
     },
     {
       "name": "Buscar artista (crea en Firestore si no existe)",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/artists?search=Queen" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/artists?search=Queen"
+      }
     },
     {
       "name": "Buscar artista nuevo (fuerza autoguardado)",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/artists?search=Rammstein" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/artists?search=Rammstein"
+      }
     },
     {
       "name": "Total de artistas en Firestore",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/artists/count" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/artists/count"
+      }
     },
     {
       "name": "Todos los artistas",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/artists" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/artists"
+      }
     },
     {
       "name": "Valores para filtros (países y géneros)",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/artists/filters" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/artists/filters"
+      }
     },
     {
       "name": "Filtrar por país Y género (AND)",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/artists?genre=Rock&country=London,%20England" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/artists?genre=Rock&country=London,%20England"
+      }
     },
     {
       "name": "Vistas previas de audio (iTunes, 30 s)",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/artists/preview?artist=Queen" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/artists/preview?artist=Queen"
+      }
     },
     {
       "name": "Rankings (US global / ES España)",
-      "request": { "method": "GET", "url": "http://localhost:8080/api/charts?storefront=ES" }
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8080/api/charts?storefront=ES"
+      }
     },
     {
       "name": "Registro (Firebase REST)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyDbG0V_ocYfEgVEEYEqZ-vaYJt4fnQ00vo"
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}"
+        },
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyCAS9hQFOE5A5dyfdjbYWH4JnLbkDkunZY"
       }
     },
     {
       "name": "Login (Firebase REST, devuelve idToken)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyDbG0V_ocYfEgVEEYEqZ-vaYJt4fnQ00vo"
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"demo@ejemplo.com\",\n  \"password\": \"secreto1\",\n  \"returnSecureToken\": true\n}"
+        },
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyCAS9hQFOE5A5dyfdjbYWH4JnLbkDkunZY"
       }
     },
     {
       "name": "Mi perfil (Bearer idToken Firebase)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/me"
       }
     },
@@ -71,8 +119,20 @@
       "name": "Dar/quitar Me gusta a canción (Bearer)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
-        "body": { "mode": "raw", "raw": "{\n  \"trackId\": \"6792889544\",\n  \"track\": \"Don't Stop Me Now\",\n  \"artist\": \"Queen\",\n  \"previewUrl\": \"https://ejemplo.m4a\"\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"trackId\": \"6792889544\",\n  \"track\": \"Don't Stop Me Now\",\n  \"artist\": \"Queen\",\n  \"previewUrl\": \"https://ejemplo.m4a\"\n}"
+        },
         "url": "http://localhost:8080/api/song-likes"
       }
     },
@@ -80,7 +140,12 @@
       "name": "Mis canciones favoritas (Bearer)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/song-likes"
       }
     },
@@ -88,17 +153,37 @@
       "name": "Email de recuperación (lo envía Firebase)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"requestType\": \"PASSWORD_RESET\",\n  \"email\": \"demo@ejemplo.com\",\n  \"continueUrl\": \"http://localhost:8080/?mode=resetPassword\"\n}" },
-        "url": "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyDbG0V_ocYfEgVEEYEqZ-vaYJt4fnQ00vo"
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requestType\": \"PASSWORD_RESET\",\n  \"email\": \"demo@ejemplo.com\",\n  \"continueUrl\": \"http://localhost:8080/?mode=resetPassword\"\n}"
+        },
+        "url": "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyCAS9hQFOE5A5dyfdjbYWH4JnLbkDkunZY"
       }
     },
     {
       "name": "Loguear escucha (Bearer)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
-        "body": { "mode": "raw", "raw": "{\n  \"artistId\": \"111238\"\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"artistId\": \"111238\"\n}"
+        },
         "url": "http://localhost:8080/api/plays"
       }
     },
@@ -106,7 +191,12 @@
       "name": "Para ti (Bearer)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/for-you"
       }
     },
@@ -114,8 +204,20 @@
       "name": "Solicitar amistad (Bearer)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"amigo@ejemplo.com\"\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"amigo@ejemplo.com\"\n}"
+        },
         "url": "http://localhost:8080/api/friends/request"
       }
     },
@@ -123,7 +225,12 @@
       "name": "Mis amigos y solicitudes (Bearer)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/friends"
       }
     },
@@ -131,7 +238,12 @@
       "name": "Actividad de amigos (Bearer)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/friends/activity"
       }
     },
@@ -139,8 +251,20 @@
       "name": "Crear playlist (Bearer)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
-        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Rock español\"\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Rock español\"\n}"
+        },
         "url": "http://localhost:8080/api/playlists"
       }
     },
@@ -148,7 +272,12 @@
       "name": "Mis playlists (Bearer)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/playlists"
       }
     },
@@ -156,8 +285,20 @@
       "name": "Dar/quitar Me gusta a artista (Bearer)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
-        "body": { "mode": "raw", "raw": "{\n  \"artistId\": \"111238\"\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"artistId\": \"111238\"\n}"
+        },
         "url": "http://localhost:8080/api/likes"
       }
     },
@@ -165,8 +306,20 @@
       "name": "Puntuar artista 0-10 (Bearer, score null = borrar)",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
-        "body": { "mode": "raw", "raw": "{\n  \"artistId\": \"111238\",\n  \"score\": 8\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"artistId\": \"111238\",\n  \"score\": 8\n}"
+        },
         "url": "http://localhost:8080/api/ratings"
       }
     },
@@ -174,15 +327,25 @@
       "name": "Mis notas de artistas (Bearer)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/ratings/ids"
       }
     },
     {
-      "name": "Descubrir (feed infinito, Bearer opcional)",
+      "name": "Descubrir (feed infinito, Bearer + plan PRO)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer TU_IDTOKEN" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TU_IDTOKEN"
+          }
+        ],
         "url": "http://localhost:8080/api/discover?offset=0"
       }
     },
@@ -190,8 +353,16 @@
       "name": "Importar artista",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
-        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Mecano\"\n}" },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Mecano\"\n}"
+        },
         "url": "http://localhost:8080/api/artists/import"
       }
     },
@@ -201,6 +372,148 @@
         "method": "POST",
         "url": "http://localhost:8080/api/artists/backfill"
       }
+    },
+    {
+      "name": "Planes",
+      "item": [
+        {
+          "name": "Mi plan (Bearer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer TU_IDTOKEN"
+              }
+            ],
+            "url": "http://localhost:8080/api/plan"
+          }
+        },
+        {
+          "name": "Hacerse PRO - pago demo (Bearer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer TU_IDTOKEN"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "http://localhost:8080/api/plan/upgrade"
+          }
+        },
+        {
+          "name": "Cancelar suscripcion (Bearer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer TU_IDTOKEN"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "http://localhost:8080/api/plan/cancel"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Administracion",
+      "item": [
+        {
+          "name": "Login admin (devuelve token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user\": \"admin\",\n  \"password\": \"P@ssw0rd\"\n}"
+            },
+            "url": "http://localhost:8080/api/admin/login"
+          }
+        },
+        {
+          "name": "Estadisticas (x-admin-token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-admin-token",
+                "value": "TU_TOKEN_ADMIN"
+              }
+            ],
+            "url": "http://localhost:8080/api/admin/stats"
+          }
+        },
+        {
+          "name": "Usuarios con plan (x-admin-token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-admin-token",
+                "value": "TU_TOKEN_ADMIN"
+              }
+            ],
+            "url": "http://localhost:8080/api/admin/users?search=&offset=0&limit=20"
+          }
+        },
+        {
+          "name": "Cambiar plan de usuario (x-admin-token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-admin-token",
+                "value": "TU_TOKEN_ADMIN"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uid\": \"UID_USUARIO\",\n  \"plan\": \"pro\"\n}"
+            },
+            "url": "http://localhost:8080/api/admin/plan"
+          }
+        },
+        {
+          "name": "Eliminar usuario y sus datos (x-admin-token)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-admin-token",
+                "value": "TU_TOKEN_ADMIN"
+              }
+            ],
+            "url": "http://localhost:8080/api/admin/users/UID_USUARIO"
+          }
+        }
+      ]
     }
   ]
 }

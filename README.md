@@ -8,7 +8,7 @@ Buscador de cantantes estilo Spotify (solo información): **nombre, país, géne
   - `public/js/controllers/ArtistController.js` → **Controlador** (orquesta Modelo ↔ Vista)
   - `public/js/app.jsx` → arranque
 - **Backend:** Node + Express + `firebase-admin`
-  - `GET /api/artists?search=NOMBRE` → busca en **toda** la colección **Firestore** (`artists`); si no existe, lo trae de **TheAudioDB** y lo **guarda automáticamente** en Firestore.
+  - `GET /api/artists?search=NOMBRE` → busca en **toda** la colección **Firestore** (`artists`); si no existe, lo trae de **TheAudioDB** (y si TheAudioDB no lo tiene, del buscador de **iTunes**, la misma fuente de gráficos y previews) y lo **guarda automáticamente** en Firestore.
   - `GET /api/artists` → catálogo paginado (`?limit=&offset=` para el scroll infinito) y filtros AND (`?country=&genre=`). `GET /api/artists/filters` → valores únicos. `GET /api/artists/count` → total.
   - `GET /api/charts?storefront=US|ES` → top 20 del ranking iTunes (global / oyentes españoles); auto-importa los que falten. Caché de 1 h.
   - `GET /api/me` → perfil del usuario según su ID token de Firebase (`Authorization: Bearer IDTOKEN`).
@@ -19,7 +19,12 @@ Buscador de cantantes estilo Spotify (solo información): **nombre, país, géne
   - `GET /api/discover?offset=` → feed paginado de canciones para la vista **Descubrir** (mismo algoritmo que Para ti; **orden aleatorio** que rota cada 2 min, sesgado por el algoritmo con sesión; devuelve `{songs, hasMore, offset}` con datos del artista para abrir su ficha).
   - Playlists: `POST /api/playlists {name}`, `GET /api/playlists` (con conteo), `DELETE /api/playlists/:id`, `GET|POST /api/playlists/:id/songs`, `DELETE /api/playlists/:id/songs/:trackId` (Bearer, solo el dueño, máx. 200 por playlist).
   - Tracking y Para ti (solo con sesión): `POST /api/plays {artistId|artist, trackId?, track?}` suma escuchas agregadas por usuario+artista — en el cliente solo se envía si la preview suena **>= 5 s** (si cambias antes, no cuenta); `GET /api/for-you` devuelve el rail ponderado (Me gusta ×3, escuchas ×1 topadas a 10, similitud ×2 decreciente) con el motivo de cada artista. Similitud real con Last.fm si hay clave (`secrets.json` → `{"lastfmKey": "..."}` o env `LASTFM_KEY`, clave gratis en last.fm/api); sin clave usa género/país.
-  - Social: `POST /api/friends/request {email}`, `POST /api/friends/respond {from, accept}`, `DELETE /api/friends/:uid`, `GET /api/friends`, `GET /api/friends/:uid/profile` (solo amigos), `GET /api/friends/activity` (rail social, máx. 20).
+  - Social: `POST /api/friends/request {email}`, `POST /api/friends/respond {from, accept}`, `DELETE /api/friends/:uid`, `GET /api/friends`, `GET /api/friends/:uid/profile` (solo amigos), `GET /api/friends/activity` (rail social, máx. 20). **Solo plan PRO.**
+  - **Planes de suscripción** (colección `subscriptions`, doc id = uid; sin documento = gratuito):
+    - `GET /api/plan` → `{plan, price}` · `POST /api/plan/upgrade` (pago simulado/demo) · `POST /api/plan/cancel` (Bearer).
+    - **Gratuito**: catálogo, búsqueda, filtros, favoritos, playlists, valoraciones, gráficos. **PRO (7,99 €/mes)**: además Social, algoritmo (Para ti / Descubrir) y seguimiento de escuchas. Los endpoints `/api/plays`, `/api/for-you`, `/api/discover` y `/api/friends*` devuelven `403 {code:"plan"}` al plan gratuito.
+  - **Panel de administración en `http://localhost:8080/admin`** (credenciales `admin`/`P@ssw0rd`, sobreescribibles en `secrets.json` → `adminUser`/`adminPass` o env `ADMIN_USER`/`ADMIN_PASS`): pestañas de **Estadísticas** (KPIs y artistas más gustados) y **Usuarios** (buscar, cambiar plan, eliminar cuenta con sus datos). API: `POST /api/admin/login {user,password}` → `x-admin-token` (caduca en 12 h, 5 intentos/5 min por IP), `GET /api/admin/stats`, `GET /api/admin/users?search=&offset=&limit=`, `POST /api/admin/plan {uid,plan}`, `DELETE /api/admin/users/:uid`.
+  - **Rendimiento**: la colección `artists` se lee en caché en memoria (TTL 60 s + dedupe de peticiones en vuelo + invalidación al escribir), así que las ~5 lecturas completas por carga de página (lista, filtros, gráficos, Para ti, Descubrir) se resuelven con **una sola consulta**. El comportamiento visible no cambia.
   - `POST /api/artists/import` con `{ "name": "..." }` → importación manual (ideal para **Postman**).
   - `POST /api/artists/backfill` → rellena `nameLower` ausente. Las webs de artistas no se guardan ni se muestran.
   - `GET /api/artists/preview?artist=NOMBRE` → top canciones con vista previa de audio (30 s, iTunes, sin claves). El backend actúa de proxy.
@@ -46,9 +51,9 @@ REM 3) Arranca (puerto 8080: el 3000/3001 los ocupa otro programa del equipo)
 REM o simplemente: npm start   (si node está en PATH)
 ```
 
-Abre **http://localhost:8080**.
+Abre **http://localhost:8080**. Panel de administración en **http://localhost:8080/admin**.
 
-> Sin `firebase-key.json` la app funciona en **modo local** (`artists.seed.json` + TheAudioDB, sin guardar). Con la clave, se activa **Firestore**.
+> Sin `firebase-key.json` la app funciona en **modo local** (`artists.seed.json` + TheAudioDB, sin guardar). Con la clave, se activa **Firestore** (proyecto **ubeat-v4**).
 
 ## Probar con Postman
 

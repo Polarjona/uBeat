@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -67,6 +67,10 @@ function App() {
     profileError: "",
     profileCard: false,
     ratings: {},
+    plan: "free",
+    planModal: false,
+    savingPlan: false,
+    planError: "",
     discover: [],
     discoverOffset: 0,
     discoverHasMore: true,
@@ -447,8 +451,20 @@ function App() {
             user={state.user}
             onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
             onLogout={() => ctrlRef.current.logout()}
+            plan={state.plan}
+            planModal={state.planModal}
+            savingPlan={state.savingPlan}
+            planError={state.planError}
+            onShowCheckout={() => setState((s) => ({ ...s, planModal: true, planError: "" }))}
+            onHideCheckout={() => setState((s) => ({ ...s, planModal: false, planError: "" }))}
+            onUpgrade={() => ctrlRef.current.upgradePlan()}
+            onCancel={() => {
+              if (window.confirm("¿Cancelar tu suscripción PRO? Volverás al plan gratuito (sin Social ni Descubrir)."))
+                ctrlRef.current.cancelPlan();
+            }}
           />
         ) : state.view === "discover" ? (
+          state.plan === "pro" ? (
           <DiscoverView
             songs={state.discover}
             loading={state.discoverLoading}
@@ -462,6 +478,13 @@ function App() {
             onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
             paused={!!(state.detail || state.profileCard || state.authModal)}
           />
+          ) : (
+          <PlanGate
+            user={state.user}
+            onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
+            onSettings={() => ctrlRef.current.go("settings")}
+          />
+          )
         ) : state.view === "playlists" ? (
           <section>
             <h2 className="section-title">Playlists</h2>
@@ -711,6 +734,7 @@ function App() {
         open={state.drawer}
         view={state.view}
         user={state.user}
+        plan={state.plan}
         favCount={state.likeIds.length}
         songFavCount={state.songLikeIds.length}
         plCount={state.playlists.length}
