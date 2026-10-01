@@ -1721,7 +1721,12 @@ const ASK_POOL = [
   "¿Cómo cancelo mi suscripción?",
   "¿Cómo cambio el tema a claro?",
   "¿Cómo recupero mi contraseña?",
+  "¿Qué me recomiendas según mis gustos?",
   "¿Quiénes son los más parecidos a Nirvana?",
+  "¿Qué es mi perfil de gustos?",
+  "¿Cómo se añade una canción a una playlist?",
+  "¿Por qué el login me pide verificar?",
+  "¿Qué hago si algo no funciona?",
 ];
 
 function sugg() {
@@ -1782,7 +1787,8 @@ async function aiAgg(kind) {
 }
 
 const dec1 = (n) => Number(n).toFixed(1).replace(".", ",");
-const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const plural = (n, w) =>
+  `${n} ${n === 1 ? w : /ón$/.test(w) ? w.replace(/ón$/, "ones") : `${w}s`}`;
 
 async function aiNameMap() {
   const list = await aiArtists();
@@ -1958,6 +1964,138 @@ async function artistCard(found) {
   );
 }
 
+// Perfil de gustos del usuario: favoritos, notas, escuchas y canciones, más
+// pesos de género/país para puntuar candidatos en las recomendaciones.
+async function aiProfile(uid) {
+  const [likedS, ratedS, tasteS, songS] = await Promise.all([
+    db.collection(LIKES_COL).where("uid", "==", uid).get(),
+    db.collection(RATINGS_COL).where("uid", "==", uid).get(),
+    db.collection(TASTE_COL).where("uid", "==", uid).get(),
+    db.collection(SONGLIKES_COL).where("uid", "==", uid).get(),
+  ]);
+  const likedIds = new Set(likedS.docs.map((d) => String(d.data().artistId)));
+  const ratedRows = ratedS.docs.map((d) => d.data()).filter((r) => isFinite(Number(r.score)));
+  const ratedMap = new Map(ratedRows.map((r) => [String(r.artistId), Number(r.score)]));
+  const playRows = tasteS.docs.map((d) => d.data()).filter((r) => Number(r.plays) > 0);
+  const playsMap = new Map(playRows.map((r) => [String(r.artistId), Number(r.plays)]));
+  const { byId } = await aiNameMap();
+  const genreW = {};
+  const countryW = {};
+  const touch = (id, w) => {
+    const a = byId.get(id);
+    if (!a) return;
+    if (a.genre && a.genre !== "Desconocido") genreW[a.genre] = (genreW[a.genre] || 0) + w;
+    if (a.country && a.country !== "Desconocido") countryW[a.country] = (countryW[a.country] || 0) + w;
+  };
+  likedIds.forEach((id) => touch(id, 3));
+  ratedRows.forEach((r) => touch(String(r.artistId), 1 + Number(r.score) / 5));
+  playRows.forEach((r) => touch(String(r.artistId), Math.min(Number(r.plays), 10) / 4));
+  return {
+    likedIds,
+    ratedMap,
+    playsMap,
+    byId,
+    likedCount: likedIds.size,
+    ratedRows,
+    playTotal: playRows.reduce((s, r) => s + Number(r.plays), 0),
+    songCount: songS.size,
+    genreW,
+    countryW,
+  };
+}
+
+// Recomendaciones personalizadas: con sesión, los candidatos se puntúan por
+// afinidad de género/país con los gustos del usuario + popularidad + valoración
+// media (excluyendo lo que ya tiene en favoritos/notas/escuchado); sin sesión,
+// lo más gustado. Respeta filtros de la pregunta ("de Rock", "de España").
+async function recommendFor(uid, q) {
+  const list = await aiArtists();
+  const [likesAgg, ratedAgg] = await Promise.all([aiAgg("likes"), aiAgg("ratings")]);
+  const likeN = new Map(likesAgg.map((r) => [r.id, r.n]));
+  const avgM = new Map(ratedAgg.map((r) => [r.id, r.avg]));
+  const countries = [...new Set(list.map((a) => a.country).filter((c) => c && c !== "Desconocido"))];
+  const genreQ = list.map((a) => a.genre).find((g) => g && g !== "Desconocido" && wordIn(q, norm(g)));
+  const geo = geoFilter(q, countries);
+  let pool = list;
+  if (genreQ) pool = pool.filter((a) => a.genre === genreQ);
+  if (geo) pool = pool.filter(geo.test);
+  const empty = !pool.length;
+  if (empty) pool = list;
+  const decorate = (a) => ({
+    a,
+    n: likeN.get(String(a.id)) || 0,
+    avg: avgM.get(String(a.id)) || 0,
+  });
+  if (!uid || !firestoreReady) {
+    const picks = pool
+      .map(decorate)
+      .sort((x, y) => y.n - x.n || y.avg - x.avg)
+      .slice(0, 4);
+    return {
+      intro:
+        genreQ || geo
+          ? `Lo más gustado de ${genreQ || geo.label}:`
+          : "Lo más gustado ahora mismo:",
+      lines: picks.map(
+        (p) =>
+          `${p.a.name} — ${p.n ? plural(p.n, "like") : "sin likes"}${p.avg ? ` · ${dec1(p.avg)}/10` : ""}`
+      ),
+    };
+  }
+  const p = await aiProfile(uid);
+  let cand = pool.filter(
+    (a) =>
+      !p.likedIds.has(String(a.id)) &&
+      !p.ratedMap.has(String(a.id)) &&
+      !p.playsMap.has(String(a.id))
+  );
+  if (cand.length < 4) cand = pool.filter((a) => !p.likedIds.has(String(a.id)));
+  if (!cand.length) cand = pool;
+  const rows = cand.map((a) => {
+    const id = String(a.id);
+    const g = a.genre && a.genre !== "Desconocido" ? p.genreW[a.genre] || 0 : 0;
+    const c = a.country && a.country !== "Desconocido" ? p.countryW[a.country] || 0 : 0;
+    const pop = Math.min(likeN.get(id) || 0, 60) / 15;
+    const rate = (avgM.get(id) || 0) / 10;
+    return {
+      a,
+      id,
+      g,
+      c,
+      n: likeN.get(id) || 0,
+      avg: avgM.get(id) || 0,
+      s: g * 2 + c + pop + rate,
+    };
+  });
+  rows.sort((x, y) => y.s - x.s);
+  const refIds = [...p.likedIds, ...p.ratedMap.keys(), ...p.playsMap.keys()];
+  const reason = (row) => {
+    if (row.g > 0) {
+      for (const rid of refIds) {
+        const ref = p.byId.get(rid);
+        if (ref && rid !== row.id && ref.genre === row.a.genre)
+          return `mismo género que ${ref.name} (${row.a.genre})`;
+      }
+    }
+    if (row.c > 0) return `mismo país que otros de tus favoritos (${row.a.country})`;
+    if (row.n >= 3) return `top de likes (${row.n})`;
+    if (row.avg >= 7) return `muy bien valorado (${dec1(row.avg)}/10)`;
+    return row.a.genre || "del catálogo";
+  };
+  const tastes = [];
+  if (p.likedCount) tastes.push(plural(p.likedCount, "favorito"));
+  if (p.ratedRows.length) tastes.push(plural(p.ratedRows.length, "puntuación"));
+  if (p.playTotal) tastes.push(plural(p.playTotal, "escucha"));
+  if (p.songCount) tastes.push(plural(p.songCount, "canción"));
+  let intro;
+  if (empty && (genreQ || geo))
+    intro = `No hay novedades de ${genreQ || geo.label}, así que te propongo del catálogo general:`;
+  else if (genreQ || geo) intro = `Según tus gustos, de ${genreQ || geo.label}:`;
+  else if (tastes.length) intro = `Según lo que te gusta (${tastes.join(", ")}):`;
+  else intro = "Todavía no sé mucho de ti, así que te propongo lo mejor del catálogo:";
+  return { intro, lines: rows.slice(0, 4).map((r) => `${r.a.name} — ${reason(r)}`) };
+}
+
 const SUPPORT_FAQ = [
   {
     keys: ["como se valora", "como puntuar", "como dar nota", "poner nota", "escala de valoracion"],
@@ -2083,6 +2221,93 @@ const SUPPORT_FAQ = [
     answer:
       "uBeat es un buscador de cantantes estilo Spotify (solo información): catálogo con nombre, país, género e imagen, búsqueda que importa artistas nuevos automáticamente, rankings de iTunes, favoritos, playlists, valoraciones 0–10, canciones con Me gusta y vistas previas de 30 s. Con sesión añades tu cuenta y, con plan PRO, Para ti, Descubrir y Social.",
   },
+  {
+    keys: [
+      "corazon",
+      "marcar favorito",
+      "marco un artista",
+      "hago favorito",
+      "dar me gusta a un artista",
+      "desmarcar",
+      "quito de favoritos",
+    ],
+    answer:
+      "Para marcar un artista: abre su ficha y pulsa el corazón (se tiñe con animación). Los verás en Menú → Mis artistas favoritos, y para quitarlo, pulsa el corazón otra vez.",
+  },
+  {
+    keys: ["quitar nota", "borrar mi nota", "quito la nota", "cambio mi nota"],
+    answer:
+      "En la ficha del artista, junto a la escala 0–10, tienes «Quitar nota» para borrar tu puntuación (deja de contar en la media) o simplemente elige otra nota para cambiarla.",
+  },
+  {
+    keys: [
+      "anadir cancion",
+      "anado una cancion",
+      "anado cancion",
+      "anadir a mi playlist",
+      "guardar cancion",
+      "boton de tres puntos",
+      "donde guardo la cancion",
+      "como anado temas",
+    ],
+    answer:
+      "En cualquier canción pulsa el botón ⋮ y elige la playlist donde guardarla (o crea una desde Menú → Playlists). Cada playlist admite hasta 200 canciones.",
+  },
+  {
+    keys: ["filtros", "filtrar por", "filtro de pais", "filtro de genero"],
+    answer:
+      "En Inicio tienes filtros de país y género: se combinan en modo AND (p. ej., España + Rock). Los valores salen del catálogo real y se actualizan solos; quita un filtro con su × para volver a la lista completa.",
+  },
+  {
+    keys: ["reproductor", "barra inferior", "cola de reproduccion", "siguiente cancion"],
+    answer:
+      "El reproductor es la barra inferior: al pulsar una canción se abre con imagen, título y controles, y se queda mientras navegas por otras vistas. Tiene volumen, Me gusta y avanzar; la vista previa dura 30 s.",
+  },
+  {
+    keys: ["buscar cancion", "busco canciones", "buscar temas", "buscador de canciones"],
+    answer:
+      "El buscador superior es de artistas (escribe el nombre y se importa solo si falta). Las canciones están en las fichas de cada artista y en los rankings (Populares en España), con vista previa de 30 s.",
+  },
+  {
+    keys: ["no encuentro a", "no sale en el buscador", "no lo encuentra", "no me lo importa", "falta un artista"],
+    answer:
+      "Escribe el nombre exacto (con sus acentos o sin ellos): la app busca en TheAudioDB y, si tampoco está, en iTunes, y lo guarda en el catálogo. Si sigue sin salir, prueba con solo el nombre del artista, sin el del álbum o grupo.",
+  },
+  {
+    keys: ["que son los graficos", "como funcionan los graficos", "populares en espana", "lista de exitos"],
+    answer:
+      "«Populares en España» es el top 20 de iTunes (también hay versión EE. UU.), actualizado cada hora y con auto-importación de los que falten en el catálogo. Los carruseles de Inicio usan esos datos.",
+  },
+  {
+    keys: ["recaptcha", "captcha", "por que me verifica", "me pide verificar"],
+    answer:
+      "El login va protegido con reCAPTCHA v3 invisible: comprueba que no eres un robot sin pedirte nada. Solo afecta a la pestaña de inicio de sesión; si alguna vez falla, recarga e inténtalo de nuevo.",
+  },
+  {
+    keys: ["configurar cookies", "que son las cookies", "preferencias de cookies", "cookie"],
+    answer:
+      "Menú → Ajustes → tarjeta «Cookies» → «Configurar cookies». Puedes permitir las de sesión (mantenerte conectado) y las de preferencias (recordar ajustes como el volumen).",
+  },
+  {
+    keys: ["ver perfil de", "perfil de mi amigo", "actividad de mis amigos", "ver a mis amigos"],
+    answer:
+      "Con plan PRO: Menú → Social → pulsa sobre un amigo para abrir su card con favoritos y actividad (no cambias de vista). Las solicitudes pendientes aparecen ahí mismo para aceptarlas o rechazarlas.",
+  },
+  {
+    keys: ["sin sesion", "sin cuenta", "sin registrarme", "sin iniciar sesion"],
+    answer:
+      "Sin sesión puedes buscar, filtrar, ver rankings y escuchar vistas previas de 30 s. Con sesión guardas favoritos, playlists y notas; con PRO añades amigos, Para ti y Descubrir.",
+  },
+  {
+    keys: ["portada", "carrusel", "que veo al abrir", "pantalla de inicio"],
+    answer:
+      "Al abrir ves la portada con un carrusel de destacados. En Inicio están los rails (Para ti, Le gusta a tus amigos, Populares…) y la lista «Todos los artistas» con scroll infinito de 24 en 24.",
+  },
+  {
+    keys: ["que hay en la ficha", "ficha del artista", "como veo las canciones", "todo de un artista"],
+    answer:
+      "La ficha muestra imagen, país, género, tus Me gusta y tu nota 0–10, y su lista de canciones con vista previa de 30 s. Al pulsar una se abre el reproductor inferior, y con ⋮ la guardas en playlists.",
+  },
 ];
 
 async function supportAnswer(question, req) {
@@ -2093,12 +2318,20 @@ async function supportAnswer(question, req) {
   const shortHelp = q.length < 24 && (has("ayuda") || has("help"));
   const who = has("quien eres") || has("que puedes") || has("que sabes hacer");
 
-  if (greet || who || shortHelp)
+  if (greet || who || shortHelp) {
+    let name = "";
+    if (uid)
+      try {
+        const u = await getAuth().getUser(uid);
+        name = String(u.displayName || (u.email || "").split("@")[0] || "").trim();
+      } catch (_) {}
     return {
       answer:
-        "Soy el asistente de soporte de uBeat. Respondo dudas sobre los datos de la app (valoraciones, likes, escuchas, rankings, canciones, artistas, planes, usuarios y tu cuenta) y sobre cómo usarla (playlists, tema, contraseña…). Prueba, por ejemplo, con «¿Cuál es el artista mejor valorado de la app?».",
+        (name ? `¡Hola, ${name}! ` : "¡Hola! ") +
+        "Soy el asistente de soporte de uBeat. Respondo dudas sobre los datos de la app (valoraciones, likes, escuchas, rankings, canciones, artistas, planes y tu cuenta), sobre cómo usarla (playlists, tema, contraseña…) y puedo recomendarte música según tus gustos. Prueba con «¿Qué me recomiendas?».",
       suggestions: sugg(),
     };
+  }
 
   if (/^(gracias|muchas gracias|genial|perfecto|vale|de acuerdo|buena idea)\b/.test(q) && q.length < 40)
     return {
@@ -2128,6 +2361,7 @@ async function supportAnswer(question, req) {
       has("chart") ||
       has("lidera") ||
       has("lider del") ||
+      has("populares en") ||
       has("lista de las canciones")) &&
     !has("likes") &&
     !has("valorad") &&
@@ -2365,7 +2599,13 @@ async function supportAnswer(question, req) {
   }
 
   // Datos personales
-  if (/\bmis\b/.test(q) || has("me gustan")) {
+  if (
+    /\bmis\b/.test(q) ||
+    has("me gustan") ||
+    has("que me gusta") ||
+    has("mi para ti") ||
+    has("mi perfil")
+  ) {
     if (!uid)
       return {
         answer: "Inicia sesión para ver tus datos personales (favoritos, puntuaciones, playlists, amigos y plan).",
@@ -2395,6 +2635,57 @@ async function supportAnswer(question, req) {
             (r
               ? `. Su media en la app es ${dec1(r.avg)}/10 (${plural(r.n, "puntuación")}).`
               : ". Todavía no tiene puntuaciones."),
+          suggestions: sugg(),
+        };
+      }
+      // Perfil de gustos / "¿qué me gusta?", "mis gustos", "mi Para ti"
+      if (
+        has("mis gustos") ||
+        has("que me gusta") ||
+        has("que tipo") ||
+        has("mi perfil") ||
+        has("mi para ti") ||
+        has("mis recomendaciones")
+      ) {
+        const prof = await aiProfile(uid);
+        const parts = [];
+        if (prof.likedCount) parts.push(plural(prof.likedCount, "favorito"));
+        if (prof.ratedRows.length) parts.push(plural(prof.ratedRows.length, "puntuación"));
+        if (prof.playTotal) parts.push(plural(prof.playTotal, "escucha"));
+        if (prof.songCount) parts.push(plural(prof.songCount, "canción favorita"));
+        const rec = await recommendFor(uid, q);
+        const recBlock = `${rec.intro}\n${rec.lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}`;
+        if (!parts.length)
+          return {
+            answer:
+              "Todavía no sé nada de ti: marca favoritos con el corazón, puntúa artistas 0–10 y deja que suenen previews y podré personalizarte todo. Mientras tanto:\n" +
+              recBlock,
+            suggestions: sugg(),
+          };
+        const favNames = [...prof.likedIds]
+          .map((id) => (prof.byId.get(id) || {}).name)
+          .filter(Boolean);
+        const genreTop = Object.entries(prof.genreW)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([g]) => g);
+        const avg =
+          prof.ratedRows.length > 1
+            ? ` Media que das: ${dec1(
+                prof.ratedRows.reduce((s, r) => s + Number(r.score), 0) / prof.ratedRows.length
+              )}/10.`
+            : "";
+        const favs = favNames.length
+          ? ` Tus favoritos: ${favNames.slice(0, 5).join(", ")}${favNames.length > 5 ? "…" : ""}.`
+          : "";
+        const genres = genreTop.length ? ` Tus géneros: ${genreTop.join(", ")}.` : "";
+        const isRail = has("mi para ti") || has("mis recomendaciones");
+        return {
+          answer:
+            (isRail
+              ? "Tu rail «Para ti» (PRO) mezcla tus Me gusta ×3, escuchas ×1 y similitud de género/país ×2. Ahora mismo saldrían:\n"
+              : `Tu perfil de uBeat: ${parts.join(", ")}.${favs}${genres}${avg}\n\n`) +
+            recBlock,
           suggestions: sugg(),
         };
       }
@@ -2430,22 +2721,55 @@ async function supportAnswer(question, req) {
       }
       if (has("playlist")) {
         const snap = await db.collection(PLAYLISTS_COL).where("uid", "==", uid).get();
-        return { answer: `Tienes ${plural(snap.size, "playlist")}.`, suggestions: sugg() };
+        if (!snap.size)
+          return {
+            answer: "Todavía no tienes playlists: ve a Menú → Playlists y crea la primera con «Crear playlist».",
+            suggestions: sugg(),
+          };
+        const names = snap.docs.map((d) => String(d.data().name || "")).filter(Boolean);
+        return {
+          answer: `Tienes ${plural(snap.size, "playlist")}: ${names.slice(0, 6).join(", ")}${
+            names.length > 6 ? "…" : ""
+          }. Las ves en Menú → Playlists.`,
+          suggestions: sugg(),
+        };
       }
       if (has("nota") || has("puntuacion") || has("valoracion")) {
         const snap = await db.collection(RATINGS_COL).where("uid", "==", uid).get();
         const docs = snap.docs.map((d) => d.data()).filter((r) => isFinite(Number(r.score)));
         if (!docs.length)
-          return { answer: "Todavía no has puntuado ningún artista.", suggestions: sugg() };
+          return {
+            answer: "Todavía no has puntuado ningún artista. Abre una ficha y usa la escala 0–10.",
+            suggestions: sugg(),
+          };
         const avg = docs.reduce((s, r) => s + Number(r.score), 0) / docs.length;
+        const { byId } = await aiNameMap();
+        const sorted = docs.slice().sort((a, b) => Number(b.score) - Number(a.score));
+        const nameOf = (r) => (byId.get(String(r.artistId)) || {}).name || r.artistId;
         return {
-          answer: `Has puntuado ${plural(docs.length, "artista")} con una media de ${dec1(avg)}/10.`,
+          answer:
+            `Has puntuado ${plural(docs.length, "artista")} con una media de ${dec1(avg)}/10. ` +
+            `Tu mejor nota: ${nameOf(sorted[0])} ${sorted[0].score}/10` +
+            (sorted.length > 1
+              ? `; la más baja: ${nameOf(sorted[sorted.length - 1])} ${sorted[sorted.length - 1].score}/10.`
+              : "."),
           suggestions: sugg(),
         };
       }
       const snap = await db.collection(LIKES_COL).where("uid", "==", uid).get();
+      if (!snap.size)
+        return {
+          answer: "Todavía no tienes artistas favoritos: abre una ficha y pulsa el corazón.",
+          suggestions: sugg(),
+        };
+      const { byId } = await aiNameMap();
+      const names = snap.docs
+        .map((d) => (byId.get(String(d.data().artistId)) || {}).name)
+        .filter(Boolean);
       return {
-        answer: `Tienes ${plural(snap.size, "artista")} en favoritos. Puedes verlos en Menú → Mis artistas favoritos.`,
+        answer: `Tienes ${plural(snap.size, "artista")} en favoritos: ${names.slice(0, 6).join(", ")}${
+          names.length > 6 ? "…" : ""
+        }. Los ves en Menú → Mis artistas favoritos.`,
         suggestions: sugg(),
       };
     }
@@ -2719,15 +3043,18 @@ async function supportAnswer(question, req) {
     !has("sorprend") &&
     !has("elige uno")
   ) {
-    const likes = await aiTopLikes();
-    const rated = await aiTopRated();
-    const picks = (likes.length ? likes : rated).slice(0, 3);
-    if (picks.length)
+    const rec = await recommendFor(uid, q);
+    if (!rec.lines.length)
       return {
-        answer: `Te recomiendo: ${picks.map((p) => `${p.name}${p.n ? ` (${p.n} likes)` : ""}`).join(", ")}. Búscalos en Inicio para ver su ficha.`,
+        answer: "El catálogo está vacío, no hay nada que recomendar ahora mismo.",
         suggestions: sugg(),
       };
-    return { answer: "Todavía no hay datos suficientes para recomendarte algo.", suggestions: sugg() };
+    return {
+      answer: `${rec.intro}\n${rec.lines
+        .map((l, i) => `${i + 1}. ${l}`)
+        .join("\n")}\nBúscalos en Inicio para ver su ficha.`,
+      suggestions: sugg(),
+    };
   }
 
   // Artista al azar
@@ -2766,7 +3093,7 @@ async function supportAnswer(question, req) {
   )
     return {
       answer:
-        "Para incidencias, abre Menú → Soporte y describe el problema (qué pasaste, qué esperabas, navegador y mensaje de error si lo hay): se abre un tiquet y el equipo lo ve en el panel de soporte. Antes puedes probar a recargar (F5) y a repetirlo en otro navegador.",
+        "Pasos rápidos:\n1. Recarga la página (F5).\n2. Comprueba tu conexión y usa un navegador actualizado (Chrome, Edge o Firefox).\n3. Si es de tu cuenta, revisa sesión, plan (Ajustes → Suscripción) y contraseña («He olvidado mi contraseña»).\n4. Repite la acción en otra ventana de incógnito para ver si es de tu equipo o del navegador.\n\nSi persiste, abre Menú → Soporte y describe el problema (pasos que diste, qué esperabas, navegador y mensaje de error): se abre un tiquet que el equipo verá en el panel de soporte.",
       suggestions: sugg(),
     };
 
