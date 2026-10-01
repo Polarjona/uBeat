@@ -368,6 +368,31 @@
       return data.plan || "free";
     },
 
+    // ---- Soporte ----
+    async sendTicket(subject, message, email) {
+      const res = await fetch("/api/support/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ subject, message, email }),
+      });
+      return handle(res);
+    },
+
+    async myTickets() {
+      const res = await fetch("/api/support/tickets", { headers: (await this.authHeaders()) });
+      const data = await handle(res);
+      return data.tickets || [];
+    },
+
+    async askSupport(question) {
+      const res = await fetch("/api/support/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ question }),
+      });
+      return handle(res);
+    },
+
     // ---- Social ----
     async friends() {
       const res = await fetch("/api/friends", { headers: (await this.authHeaders()) });

@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -71,6 +71,15 @@ function App() {
     planModal: false,
     savingPlan: false,
     planError: "",
+    tickets: [],
+    loadingTickets: false,
+    ticketsError: "",
+    sendingTicket: false,
+    ticketSent: "",
+    ticketError: "",
+    aiMessages: [],
+    aiLoading: false,
+    aiError: "",
     discover: [],
     discoverOffset: 0,
     discoverHasMore: true,
@@ -473,6 +482,22 @@ function App() {
               if (window.confirm("¿Cancelar tu suscripción PRO? Volverás al plan gratuito (sin Social ni Descubrir)."))
                 ctrlRef.current.cancelPlan();
             }}
+          />
+        ) : state.view === "support" ? (
+          <SupportView
+            user={state.user}
+            aiMessages={state.aiMessages}
+            aiLoading={state.aiLoading}
+            aiError={state.aiError}
+            tickets={state.tickets}
+            loadingTickets={state.loadingTickets}
+            ticketsError={state.ticketsError}
+            sendingTicket={state.sendingTicket}
+            ticketSent={state.ticketSent}
+            ticketError={state.ticketError}
+            onAsk={(q) => ctrlRef.current.askSupport(q)}
+            onSendTicket={(t) => ctrlRef.current.sendTicket(t)}
+            onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
           />
         ) : state.view === "discover" ? (
           state.plan === "pro" ? (

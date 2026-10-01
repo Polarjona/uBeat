@@ -434,6 +434,58 @@
       ]
     },
     {
+      "name": "Soporte",
+      "item": [
+        {
+          "name": "Enviar tiquet (anonimo o Bearer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"No me carga el ranking\",\n  \"message\": \"El apartado de rankings no carga desde ayer en Firefox.\",\n  \"email\": \"pepe@ejemplo.com\"\n}"
+            },
+            "url": "http://localhost:8080/api/support/tickets"
+          }
+        },
+        {
+          "name": "Mis tiquets (Bearer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer TU_IDTOKEN"
+              }
+            ],
+            "url": "http://localhost:8080/api/support/tickets"
+          }
+        },
+        {
+          "name": "Preguntar al asistente IA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Cual es el artista mejor valorado de la app?\"\n}"
+            },
+            "url": "http://localhost:8080/api/support/ask"
+          }
+        }
+      ]
+    },
+    {
       "name": "Administracion",
       "item": [
         {
@@ -511,6 +563,53 @@
               }
             ],
             "url": "http://localhost:8080/api/admin/users/UID_USUARIO"
+          }
+        },
+        {
+          "name": "Tiquets de soporte (lista y filtros) (x-admin-token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-admin-token",
+                "value": "TU_TOKEN_ADMIN"
+              }
+            ],
+            "url": "http://localhost:8080/api/admin/tickets?status=&search=&offset=0&limit=50"
+          }
+        },
+        {
+          "name": "Cambiar estado de tiquet (x-admin-token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-admin-token",
+                "value": "TU_TOKEN_ADMIN"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"ID_TIQUET\",\n  \"status\": \"resolved\"\n}"
+            },
+            "url": "http://localhost:8080/api/admin/tickets/status"
+          }
+        },
+        {
+          "name": "Eliminar tiquet (x-admin-token)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "x-admin-token",
+                "value": "TU_TOKEN_ADMIN"
+              }
+            ],
+            "url": "http://localhost:8080/api/admin/tickets/ID_TIQUET"
           }
         }
       ]

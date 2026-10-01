@@ -1549,6 +1549,93 @@ code {
 .settings-user span { color: var(--muted); font-size: 12.5px; }
 .settings-user .btn { margin-left: auto; }
 
+/* ---------- Vista Soporte ---------- */
+.support-view .muted { color: var(--muted); font-size: 13.5px; }
+
+.ai-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 4px 2px 8px;
+  margin-bottom: 10px;
+}
+
+.ai-msg {
+  max-width: 88%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.ai-msg.bot { background: var(--surface-2); border: 1px solid var(--line); color: var(--text); align-self: flex-start; }
+.ai-msg.user { background: var(--accent); color: var(--accent-ink); align-self: flex-end; }
+
+.ai-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+.ai-chip {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ai-chip:hover { border-color: var(--accent); }
+.ai-chip:disabled { opacity: 0.55; cursor: default; }
+
+.ai-form { display: flex; gap: 8px; }
+.ai-form input { flex: 1; width: auto; }
+
+.ai-form input,
+.ticket-form input,
+.ticket-form textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font: inherit;
+  width: 100%;
+}
+
+.ai-form input::placeholder,
+.ticket-form input::placeholder,
+.ticket-form textarea::placeholder { color: var(--muted); }
+
+.ticket-form { display: flex; flex-direction: column; gap: 8px; }
+.ticket-form textarea { resize: vertical; min-height: 96px; }
+.ticket-form .btn { align-self: flex-start; }
+
+.ticket-row {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.ticket-row .tr-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.ticket-row .muted { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.ticket-row p { margin: 6px 0 0; font-size: 13px; color: var(--muted); white-space: pre-line; }
+
+.ticket-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ticket-status.open { background: rgba(245, 158, 11, 0.16); color: #f59e0b; }
+.ticket-status.resolved { background: rgba(34, 197, 94, 0.16); color: #4ade80; }
+
 /* ---------- Cookies ---------- */
 .cookie-banner {
   position: fixed;

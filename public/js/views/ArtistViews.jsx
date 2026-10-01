@@ -231,6 +231,13 @@ window.ArtistaViews = (function () {
             Playlists
             {user && plCount > 0 ? ` (${plCount})` : ""}
           </button>
+          <button
+            type="button"
+            className={view === "support" ? "drawer-item active" : "drawer-item"}
+            onClick={() => onGo("support")}
+          >
+            Soporte
+          </button>
           </div>
           {plan === "pro" ? (
           <div className="drawer-social">
@@ -1903,6 +1910,193 @@ window.ArtistaViews = (function () {
     );
   }
 
+  // Vista de Soporte: asistente de datos + envío de tiquets.
+  const SUPPORT_CHIPS = [
+    "¿Cuál es el artista mejor valorado de la app?",
+    "¿Cuáles son los artistas más gustados?",
+    "¿Cuántos artistas hay?",
+    "¿Quién lidera el ranking de España?",
+    "¿Qué canciones me gustan?",
+    "¿Qué planes hay?",
+  ];
+
+  function SupportView({
+    user,
+    aiMessages,
+    aiLoading,
+    aiError,
+    tickets,
+    loadingTickets,
+    ticketsError,
+    sendingTicket,
+    ticketSent,
+    ticketError,
+    onAsk,
+    onSendTicket,
+    onLogin,
+  }) {
+    const [question, setQuestion] = useState("");
+    const [subject, setSubject] = useState("");
+    const [message, setMessage] = useState("");
+    const [email, setEmail] = useState("");
+    const chatRef = useRef(null);
+
+    useEffect(() => {
+      if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }, [aiMessages, aiLoading]);
+
+    const ask = (e) => {
+      e.preventDefault();
+      const q = question.trim();
+      if (!q || aiLoading) return;
+      setQuestion("");
+      onAsk(q);
+    };
+    const last = aiMessages[aiMessages.length - 1];
+    const chips = last && last.role === "bot" && last.suggestions && last.suggestions.length
+      ? last.suggestions
+      : SUPPORT_CHIPS;
+
+    const submitTicket = async (e) => {
+      e.preventDefault();
+      const ok = await onSendTicket({
+        subject: subject.trim(),
+        message: message.trim(),
+        email: email.trim(),
+      });
+      if (ok) {
+        setSubject("");
+        setMessage("");
+      }
+    };
+
+    return (
+      <section className="support-view">
+        <h2 className="section-title">Soporte</h2>
+
+        <div className="settings-card">
+          <h3>Asistente de soporte</h3>
+          <p>Pregunta sobre los datos de la app: valoraciones, likes, artistas, planes o tu cuenta.</p>
+          <div className="ai-chat" ref={chatRef}>
+            {aiMessages.length === 0 ? (
+              <div className="ai-msg bot">
+                ¡Hola! Pregúntame, por ejemplo, «¿Cuál es el artista mejor valorado de la app?».
+              </div>
+            ) : (
+              aiMessages.map((m, i) => (
+                <div key={i} className={"ai-msg " + m.role}>
+                  {m.text}
+                </div>
+              ))
+            )}
+            {aiLoading ? <div className="ai-msg bot">Pensando…</div> : null}
+          </div>
+          {aiError ? <div className="error sm">{aiError}</div> : null}
+          <div className="ai-suggestions">
+            {chips.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className="ai-chip"
+                onClick={() => onAsk(c)}
+                disabled={aiLoading}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <form className="ai-form" onSubmit={ask}>
+            <input
+              type="text"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Escribe tu pregunta…"
+              maxLength={400}
+              aria-label="Pregunta para el asistente"
+            />
+            <button className="btn" type="submit" disabled={aiLoading || !question.trim()}>
+              {aiLoading ? "…" : "Preguntar"}
+            </button>
+          </form>
+        </div>
+
+        <div className="settings-card">
+          <h3>Enviar un tiquet</h3>
+          <p>
+            Describe tu problema o sugerencia. El equipo de soporte lo verá reflejado en el panel de
+            administración y te responderá.
+          </p>
+          <form className="ticket-form" onSubmit={submitTicket}>
+            <input
+              type="text"
+              placeholder="Asunto"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              required
+              minLength={3}
+              maxLength={150}
+            />
+            {!user ? (
+              <input
+                type="email"
+                placeholder="Tu email (para recibir la respuesta)"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            ) : null}
+            <textarea
+              placeholder="Cuéntanos los detalles…"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              required
+              minLength={10}
+              maxLength={5000}
+              rows={5}
+            />
+            <button className="btn" type="submit" disabled={sendingTicket}>
+              {sendingTicket ? "Enviando…" : "Enviar tiquet"}
+            </button>
+          </form>
+          {ticketError ? <div className="error sm">{ticketError}</div> : null}
+          {ticketSent ? (
+            <div className="notice-ok">Tiquet enviado. Aparecerá como abierto en el panel de soporte.</div>
+          ) : null}
+        </div>
+
+        <div className="settings-card">
+          <h3>Mis tiquets</h3>
+          {!user ? (
+            <p className="muted">
+              Inicia sesión para ver los tiquets que hayas enviado.{" "}
+              <button type="button" className="link" onClick={onLogin}>
+                Log in
+              </button>
+            </p>
+          ) : loadingTickets ? (
+            <Loader />
+          ) : ticketsError ? (
+            <div className="error sm">{ticketsError}</div>
+          ) : tickets.length === 0 ? (
+            <p className="muted">Todavía no has enviado tiquets.</p>
+          ) : (
+            tickets.map((t) => (
+              <div className="ticket-row" key={String(t.id)}>
+                <div className="tr-head">
+                  <strong>{t.subject}</strong>
+                  <span className={"ticket-status " + (t.status === "resolved" ? "resolved" : "open")}>
+                    {t.status === "resolved" ? "Resuelto" : "Abierto"}
+                  </span>
+                </div>
+                <div className="muted sm">{String(t.createdAt || "").slice(0, 10)}</div>
+                <p>{t.message}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    );
+  }
+
   function Footer({ onCookies }) {
     return (
       <footer className="footer">
@@ -1937,5 +2131,5 @@ window.ArtistaViews = (function () {
     );
   }
 
-  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate };
+  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView };
 })();

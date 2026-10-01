@@ -125,6 +125,7 @@
         loadPlaylists();
       }
       if (view === "playlists") loadPlaylists();
+      if (view === "support") loadTickets();
       if (view === "discover") {
         // El feed tiene su propio audio: cierra la barra para no solapar sonido.
         if (getState().barQueue.length) closeBar();
@@ -170,6 +171,55 @@
       } catch (err) {
         setState((s) => ({ ...s, savingPlan: false, planError: err.message }));
         return false;
+      }
+    }
+
+    // ---- Soporte ----
+    async function loadTickets() {
+      if (!getState().user) {
+        setState((s) => ({ ...s, tickets: [], loadingTickets: false, ticketsError: "" }));
+        return;
+      }
+      setState((s) => ({ ...s, loadingTickets: true, ticketsError: "" }));
+      try {
+        const tickets = await model.myTickets();
+        setState((s) => ({ ...s, tickets, loadingTickets: false }));
+      } catch (err) {
+        setState((s) => ({ ...s, loadingTickets: false, ticketsError: err.message }));
+      }
+    }
+
+    async function sendTicket({ subject, message, email }) {
+      setState((s) => ({ ...s, sendingTicket: true, ticketError: "", ticketSent: "" }));
+      try {
+        const r = await model.sendTicket(subject, message, email || "");
+        setState((s) => ({ ...s, sendingTicket: false, ticketSent: r.id || "ok" }));
+        loadTickets();
+        return true;
+      } catch (err) {
+        setState((s) => ({ ...s, sendingTicket: false, ticketError: err.message }));
+        return false;
+      }
+    }
+
+    async function askSupport(question) {
+      const text = String(question || "").trim();
+      if (!text) return;
+      setState((s) => ({
+        ...s,
+        aiMessages: [...s.aiMessages, { role: "user", text }],
+        aiLoading: true,
+        aiError: "",
+      }));
+      try {
+        const r = await model.askSupport(text);
+        setState((s) => ({
+          ...s,
+          aiLoading: false,
+          aiMessages: [...s.aiMessages, { role: "bot", text: r.answer, suggestions: r.suggestions || [] }],
+        }));
+      } catch (err) {
+        setState((s) => ({ ...s, aiLoading: false, aiError: err.message }));
       }
     }
 
@@ -905,6 +955,9 @@
       loadPlan,
       upgradePlan,
       cancelPlan,
+      loadTickets,
+      sendTicket,
+      askSupport,
       trackStarted,
       loadSocial,
       sendFriendRequest,
