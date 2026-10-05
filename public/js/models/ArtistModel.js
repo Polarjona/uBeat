@@ -53,7 +53,7 @@
   }
 
   // reCAPTCHA v3 (invisible, solo pestaña de login).
-  const RECAPTCHA_SITE_KEY = "6Ld3R74tAAAAAIjxWxZcYB93w2dVvSPzUoZ0H4H-";
+  const RECAPTCHA_SITE_KEY = "6LdjFs4tAAAAAMSP7Nf6k2qlXqccKSWAtEL6jtXo";
   let recaptchaLoading = null;
 
   function loadRecaptcha() {
@@ -219,6 +219,41 @@
       return data.songs || [];
     },
 
+    // ---- Notas de artistas (0-10) ----
+    async setRating(artistId, score) {
+      const res = await fetch("/api/ratings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ artistId, score }),
+      });
+      const data = await handle(res);
+      return data.score;
+    },
+
+    async myRatings() {
+      if (!(window.fbAuth && window.fbAuth.currentUser)) return {};
+      try {
+        const res = await fetch("/api/ratings/ids", { headers: (await this.authHeaders()) });
+        const data = await handle(res);
+        return data.ratings || {};
+      } catch (_) {
+        return {};
+      }
+    },
+
+    // ---- Descubrir (feed infinito de canciones) ----
+    async discover(offset) {
+      const res = await fetch(`/api/discover?offset=${Number(offset) || 0}`, {
+        headers: (await this.authHeaders()),
+      });
+      const data = await handle(res);
+      return {
+        songs: data.songs || [],
+        hasMore: !!data.hasMore,
+        offset: Number(data.offset) || 0,
+      };
+    },
+
   // El email con el enlace lo envía Firebase; el enlace vuelve a esta app.
     async forgot(email) {
       try {
@@ -306,6 +341,58 @@
       return data.artists || [];
     },
 
+    // ---- Plan de suscripción ----
+    async plan() {
+      const res = await fetch("/api/plan", { headers: (await this.authHeaders()) });
+      const data = await handle(res);
+      return data.plan || "free";
+    },
+
+    async upgradePlan() {
+      const res = await fetch("/api/plan/upgrade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({}),
+      });
+      const data = await handle(res);
+      return data.plan || "pro";
+    },
+
+    async cancelPlan() {
+      const res = await fetch("/api/plan/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({}),
+      });
+      const data = await handle(res);
+      return data.plan || "free";
+    },
+
+    // ---- Soporte ----
+    async sendTicket(subject, message, email) {
+      const res = await fetch("/api/support/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ subject, message, email }),
+      });
+      return handle(res);
+    },
+
+    async myTickets() {
+      const res = await fetch("/api/support/tickets", { headers: (await this.authHeaders()) });
+      const data = await handle(res);
+      return data.tickets || [];
+    },
+
+    async askSupport(question) {
+      const res = await fetch("/api/support/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await this.authHeaders()) },
+        body: JSON.stringify({ question }),
+      });
+      return handle(res);
+    },
+
     // ---- Social ----
     async friends() {
       const res = await fetch("/api/friends", { headers: (await this.authHeaders()) });
@@ -380,12 +467,13 @@
       };
     },
 
-    async search(name, { country = "", genre = "" } = {}) {
+    async search(name, { country = "", genre = "", limit = 0 } = {}) {
       const q = (name || "").trim();
       if (!q) throw new Error("Escribe el nombre de un artista.");
       const p = new URLSearchParams({ search: q });
       if (country) p.set("country", country);
       if (genre) p.set("genre", genre);
+      if (limit > 0) p.set("limit", String(limit));
       const res = await fetch(`/api/artists?${p.toString()}`);
       const data = await handle(res);
       return {

@@ -52,7 +52,7 @@ const norm = (s) =>
 async function traer(nombre) {
   try {
     const r = await fetch(
-      `https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(nombre)}`
+      `https://www.theaudiodb.com/api/v1/json/123/search.php?s=${encodeURIComponent(nombre)}`
     );
     if (!r.ok) return [];
     const data = await r.json();
