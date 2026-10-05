@@ -461,7 +461,7 @@ async function chartArtists(storefront, limit = 20) {
     ),
   ];
 
-  const docs = (await allArtistsDocs()).slice();
+  const docs = (firestoreReady ? await allArtistsDocs() : loadSeed()).slice();
 
   // Partes de colaboraciones ("A & B", "A, B", "A feat. B"...).
   const splitParts = (nm) =>
@@ -493,7 +493,7 @@ async function chartArtists(storefront, limit = 20) {
             const cands = [nm, ...splitParts(nm)].map(norm).filter(Boolean);
             const m = fresh.find((f) => cands.includes(norm(f.name)));
             if (!m) return null;
-            await saveArtists([m]);
+            if (firestoreReady) await saveArtists([m]);
             docs.push(m);
             a = m;
           }
@@ -523,8 +523,6 @@ app.get("/api/charts", async (req, res) => {
     const sf = String(req.query.storefront || "US").toUpperCase();
     if (!["US", "ES"].includes(sf))
       return res.status(400).json({ ok: false, error: "storefront: US o ES." });
-    if (!firestoreReady)
-      return res.status(400).json({ ok: false, error: "Sin Firestore (modo local)." });
     const data = await chartArtists(sf, Math.min(Number(req.query.limit) || 20, 20));
     res.json({ ok: true, storefront: sf, artists: data, source: "itunes-charts" });
   } catch (err) {
