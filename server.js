@@ -3425,9 +3425,11 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(PORT, () => {
-  console.log(`Artistas App en http://localhost:${PORT}`);
-  console.log(`Modo Firestore: ${firestoreReady ? "ACTIVO" : "LOCAL (sin clave)"}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Artistas App en http://localhost:${PORT}`);
+    console.log(`Modo Firestore: ${firestoreReady ? "ACTIVO" : "LOCAL (sin clave)"}`);
+  });
+}
 
 module.exports = app;
