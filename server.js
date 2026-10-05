@@ -43,7 +43,13 @@ let firestoreReady = false;
 
 function initFirebase() {
   try {
-    if (!fs.existsSync(KEY_PATH)) {
+    let serviceAccount = null;
+    const jsonEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    if (jsonEnv) {
+      serviceAccount = JSON.parse(jsonEnv);
+    } else if (fs.existsSync(KEY_PATH)) {
+      serviceAccount = require(KEY_PATH);
+    } else {
       console.warn(
         `[API] firebase-key.json no encontrado en ${KEY_PATH}. ` +
           "Modo LOCAL: se usará artists.seed.json + TheAudioDB (sin guardar en Firestore)."
@@ -52,7 +58,6 @@ function initFirebase() {
     }
     admin = require("firebase-admin");
     const { getFirestore } = require("firebase-admin/firestore");
-    const serviceAccount = require(KEY_PATH);
     const credential =
       admin.credential && admin.credential.cert
         ? admin.credential.cert(serviceAccount)
@@ -3424,3 +3429,5 @@ app.listen(PORT, () => {
   console.log(`Artistas App en http://localhost:${PORT}`);
   console.log(`Modo Firestore: ${firestoreReady ? "ACTIVO" : "LOCAL (sin clave)"}`);
 });
+
+module.exports = app;

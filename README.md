@@ -56,6 +56,15 @@ Abre **http://localhost:8080**. Panel de administración en **http://localhost:8
 
 > Sin `firebase-key.json` la app funciona en **modo local** (`artists.seed.json` + TheAudioDB, sin guardar). Con la clave, se activa **Firestore** (proyecto **ubeat-v4**).
 
+## Despliegue en Vercel
+
+- Repositorio en GitHub: `alejandrozz-1/ubeat` con **3 ramas**: `main` (producción, se auto-despliega en Vercel en https://ubeat.vercel.app), `testing` y `dev`.
+- `server.js` **exporta la app Express** (`module.exports = app`), que es como Vercel la ejecuta como Function; los estáticos de `public/**` los sirve el CDN de Vercel y `vercel.json` añade `public/**` al bundle de la Function para que funcionen el fallback SPA (`/`) y `/admin`.
+- **Sin variables de entorno la app arranca en modo local** (semilla + TheAudioDB, sin Firestore). Para la funcionalidad completa, en Vercel → *Project → Settings → Environment Variables*:
+  - `GOOGLE_APPLICATION_CREDENTIALS_JSON` → contenido completo del JSON de la cuenta de servicio de Firebase (el mismo que `firebase-key.json`): activa Firestore y la verificación de ID token.
+  - `RECAPTCHA_SECRET` → secreto de reCAPTCHA (el mismo de `secrets.json`); sin él `/api/auth/captcha` devuelve 503 y el login/registro no supera el captcha.
+  - `LASTFM_KEY` (opcional, similitud real en Para ti), `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM` (opcional, email de recuperación de contraseña), `ADMIN_USER`/`ADMIN_PASS` (opcional, panel `/admin`).
+
 ## Probar con Postman
 
 1. Importa `postman_collection.json`.
