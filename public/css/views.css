@@ -693,13 +693,13 @@
 
 .heart:hover { border-color: var(--danger); color: var(--danger); }
 
-.heart.on {
+.heart.liked, .heart.on {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   border-color: var(--danger);
   color: var(--danger);
 }
 
-.heart.on svg { animation: pop 0.35s ease; }
+.heart.pop svg { animation: pop 0.35s ease; }
 
 /* Puntuación 0-10 */
 .rate-box {
@@ -1294,7 +1294,10 @@
 
 .disc-rail .heart svg { stroke: #fff; }
 
-.disc-rail .heart.liked { border-color: var(--accent); }
+.disc-rail .heart.liked {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 22%, rgba(5, 8, 12, 0.45));
+}
 
 .disc-artist-btn {
   display: flex;
