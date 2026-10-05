@@ -359,6 +359,7 @@ async function searchOrImport(name) {
 initFirebase();
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -3134,7 +3135,6 @@ app.post("/api/support/ask", async (req, res) => {
 // ---------- Panel de administración ----------
 // Credenciales: secrets.json {"adminUser","adminPass"} o env ADMIN_USER/ADMIN_PASS.
 const ADMIN_TOKEN_TTL_MS = 12 * 3600e3;
-const adminTokens = new Map(); // token -> expiresAt
 const adminLoginTries = new Map(); // ip -> { at, n }
 
 function adminCredentials() {
@@ -3148,20 +3148,28 @@ function adminCredentials() {
   return { u, p };
 }
 
-function adminOk(req) {
-  const t = req.get("x-admin-token");
-  const exp = t && adminTokens.get(t);
-  if (!exp) return false;
-  if (exp < Date.now()) {
-    adminTokens.delete(t);
-    return false;
-  }
-  return true;
+function adminTokenKey() {
+  const { p } = adminCredentials();
+  return crypto.createHash("sha256").update("uBeat-admin|" + p).digest();
 }
 
-function pruneAdminTokens() {
-  const now = Date.now();
-  for (const [t, exp] of adminTokens) if (exp < now) adminTokens.delete(t);
+function signAdminToken(exp) {
+  const sig = crypto
+    .createHmac("sha256", adminTokenKey())
+    .update(String(exp))
+    .digest("hex");
+  return `${exp}.${sig}`;
+}
+
+function adminOk(req) {
+  const t = String(req.get("x-admin-token") || "");
+  const m = /^(\d{1,20})\.([0-9a-f]{64})$/.exec(t);
+  if (!m) return false;
+  const exp = Number(m[1]);
+  if (!Number.isFinite(exp) || exp < Date.now()) return false;
+  const expect = crypto.createHmac("sha256", adminTokenKey()).update(m[1]).digest();
+  const got = Buffer.from(m[2], "hex");
+  return got.length === expect.length && crypto.timingSafeEqual(got, expect);
 }
 
 function adminRateLimited(req) {
@@ -3187,9 +3195,7 @@ app.post("/api/admin/login", (req, res) => {
     const pass = String((req.body && req.body.password) || "");
     if (user !== u || pass !== p)
       return res.status(401).json({ ok: false, error: "Credenciales incorrectas." });
-    const token = crypto.randomBytes(24).toString("hex");
-    adminTokens.set(token, Date.now() + ADMIN_TOKEN_TTL_MS);
-    pruneAdminTokens();
+    const token = signAdminToken(Date.now() + ADMIN_TOKEN_TTL_MS);
     res.json({ ok: true, token });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
