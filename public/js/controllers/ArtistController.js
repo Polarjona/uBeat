@@ -118,7 +118,7 @@
 
     // ---- Navegación ----
     function go(view) {
-      setState((s) => ({ ...s, view, drawer: false }));
+      setState((s) => ({ ...s, view, sideOpen: false }));
       if (view === "favorites") loadFavorites();
       if (view === "favSongs") {
         loadSongFavorites();
@@ -507,7 +507,7 @@
         const code = q.get("oobCode") || "";
         if (q.get("mode") !== "resetPassword" || !code) return;
         window.history.replaceState({}, "", window.location.pathname);
-        setState((s) => ({ ...s, entered: true, resetOob: code, resetLoading: true }));
+        setState((s) => ({ ...s, resetOob: code, resetLoading: true }));
         const email = await window.fbAuth.verifyPasswordResetCode(code);
         setState((s) => ({ ...s, resetEmail: email || "", resetLoading: false }));
       } catch (err) {
@@ -834,7 +834,7 @@
     }
 
     async function openFriend(uid) {
-      setState((s) => ({ ...s, drawer: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
+      setState((s) => ({ ...s, sideOpen: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
       try {
         const p = await model.friendProfile(uid);
         setState((s) => ({ ...s, friendProfile: p, loadingProfile: false }));
@@ -846,7 +846,7 @@
     async function openMyProfile() {
       const { user } = getState();
       if (!user) return;
-      setState((s) => ({ ...s, drawer: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
+      setState((s) => ({ ...s, sideOpen: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
       try {
         await Promise.all([loadFavorites(), loadSongFavorites()]);
         const p = await model.friendProfile(user.id);
@@ -869,14 +869,6 @@
       } catch (_) {
         setState((s) => ({ ...s, loadingActivity: false, activity: [] }));
       }
-    }
-
-    // ---- Transición de la portada ----
-    function enter() {
-      const { entered, leaving } = getState();
-      if (entered || leaving) return;
-      setState((s) => ({ ...s, leaving: true }));
-      setTimeout(() => setState((s) => ({ ...s, entered: true })), 750);
     }
 
     // ---- Reproductor ----
@@ -927,7 +919,6 @@
       setFilter,
       clearFilters,
       search,
-      enter,
       go,
       restoreSession,
       login,

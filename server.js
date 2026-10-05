@@ -561,9 +561,9 @@ async function meFromUid(uid) {
 // Colección "subscriptions" (doc id = uid): { plan, source, updatedAt }.
 // Sin documento => plan gratuito (por defecto).
 //   - free: todo excepto Social y el algoritmo (Para ti / Descubrir).
-//   - pro:  7,99 €/mes, acceso total.
+//   - pro:  3,99 €/mes, acceso total.
 const SUBS_COL = "subscriptions";
-const PRO_PRICE = "7,99 €/mes";
+const PRO_PRICE = "3,99 €/mes";
 const planCache = new Map(); // uid -> { at, plan }
 const PLAN_TTL_MS = 30e3;
 
@@ -2163,7 +2163,7 @@ const SUPPORT_FAQ = [
   {
     keys: ["hacerse pro", "hazte pro", "pasarme a pro", "pagar pro", "comprar pro", "me hago pro", "upgrade"],
     answer:
-      "En Menú → Ajustes → Suscripción, pulsa «Hazte PRO — 7,99 €/mes». Es un pago simulado para la demo y el plan PRO se activa al instante.",
+      "En Menú → Ajustes → Suscripción, pulsa «Hazte PRO — 3,99 €/mes». Es un pago simulado para la demo y el plan PRO se activa al instante.",
   },
   {
     keys: ["cancelar suscripcion", "cancelar plan", "baja del pro", "dejar de pagar", "cancelar pro"],
@@ -2582,7 +2582,7 @@ async function supportAnswer(question, req) {
     )
       return {
         answer:
-          "Hazte PRO en Menú → Ajustes → Suscripción, botón «Hazte PRO — 7,99 €/mes». Es un pago simulado para la demo y se activa al momento.",
+          "Hazte PRO en Menú → Ajustes → Suscripción, botón «Hazte PRO — 3,99 €/mes». Es un pago simulado para la demo y se activa al momento.",
         suggestions: sugg(),
       };
     let personal = "";
@@ -2592,7 +2592,7 @@ async function supportAnswer(question, req) {
     }
     return {
       answer:
-        `Hay dos planes: Gratuito (catálogo, favoritos, playlists, canciones y valoraciones) y PRO (7,99 €/mes), que añade Social (amigos y actividad) y las funciones Para ti y Descubrir.` +
+        `Hay dos planes: Gratuito (catálogo, favoritos, playlists, canciones y valoraciones) y PRO (3,99 €/mes), que añade Social (amigos y actividad) y las funciones Para ti y Descubrir.` +
         personal,
       suggestions: sugg(),
     };

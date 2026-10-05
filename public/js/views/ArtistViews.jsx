@@ -7,24 +7,108 @@
 const { useState, useEffect, useRef } = React;
 
 window.ArtistaViews = (function () {
-  function SearchBar({ value, onChange, onSearch, loading }) {
+  function SearchBar({ value, onChange, onSearch, loading, onPick }) {
+    const [sugs, setSugs] = useState([]);
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef(null);
+
+    // Sugerencias: busca en el catálogo con debounce mientras escribes.
+    useEffect(() => {
+      const q = (value || "").trim();
+      if (q.length < 2) {
+        setSugs([]);
+        return undefined;
+      }
+      let dead = false;
+      const t = setTimeout(() => {
+        window.ArtistModel.search(q, { limit: 6 })
+          .then((r) => {
+            if (!dead) setSugs(r.artists || []);
+          })
+          .catch(() => {
+            if (!dead) setSugs([]);
+          });
+      }, 220);
+      return () => {
+        dead = true;
+        clearTimeout(t);
+      };
+    }, [value]);
+
+    // Cierra el desplegable al pulsar fuera.
+    useEffect(() => {
+      if (!open) return undefined;
+      const onDown = (e) => {
+        if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      };
+      document.addEventListener("mousedown", onDown);
+      return () => document.removeEventListener("mousedown", onDown);
+    }, [open]);
+
+    const pick = (a) => {
+      setOpen(false);
+      const input = wrapRef.current ? wrapRef.current.querySelector("input") : null;
+      const rect = input
+        ? input.getBoundingClientRect()
+        : { top: 60, left: 60, width: 40, height: 40 };
+      onPick && onPick(a, rect);
+    };
+
+    const show = open && sugs.length > 0 && (value || "").trim().length >= 2;
     return (
       <form
         className="search"
+        ref={wrapRef}
         onSubmit={(e) => {
           e.preventDefault();
+          setOpen(false);
           onSearch();
         }}
       >
+        <span className="search-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z" /></svg>
+        </span>
         <input
+          id="global-search"
           type="text"
-          placeholder="Buscar por nombre (p. ej., Queen, Mecano…)"
+          placeholder="Buscar artistas… (p. ej., Queen)"
+          autoComplete="off"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+          }}
         />
         <button className="btn" type="submit" disabled={loading}>
           {loading ? "…" : "Buscar"}
         </button>
+        {show ? (
+          <div className="search-sug" role="listbox">
+            {sugs.map((a) => (
+              <button
+                type="button"
+                key={String(a.id) + a.name}
+                className="sug-item"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(a)}
+              >
+                {a.image ? (
+                  <img src={a.image} alt="" loading="lazy" />
+                ) : (
+                  <span className="sug-ph">♪</span>
+                )}
+                <span className="sug-name">
+                  <strong>{a.name}</strong>
+                  <small>
+                    {a.country}
+                    {a.genre ? ` · ${a.genre}` : ""}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </form>
     );
   }
@@ -93,19 +177,23 @@ window.ArtistaViews = (function () {
         onClick={(e) => onSelect && onSelect(artist, e.currentTarget.getBoundingClientRect())}
         title="Ver detalle"
       >
-        <img
-          src={img}
-          alt={artist.name}
-          loading="lazy"
-          onError={() => setImg(window.ArtistModel.fallbackImg)}
-        />
+        <div className="card-media">
+          <img
+            src={img}
+            alt={artist.name}
+            loading="lazy"
+            onError={() => setImg(window.ArtistModel.fallbackImg)}
+          />
+          <span className="card-cta" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          </span>
+        </div>
         <div className="card-body">
           <h3>{artist.name}</h3>
-          <div className="meta">
-            <span><span className="k">País</span><br /><b>{artist.country}</b></span>
-            <span><span className="k">Género</span><br /><b>{artist.genre}</b></span>
+          <div className="chips">
+            <span className="chip chip-accent">{artist.genre}</span>
+            <span className="chip">{artist.country}</span>
           </div>
-          <span className="tag">{artist.genre}</span>
         </div>
       </article>
     );
@@ -124,6 +212,49 @@ window.ArtistaViews = (function () {
       <section className="grid">
         {artists.map((a) => (
           <ArtistCard key={String(a.id) + a.name} artist={a} onSelect={onSelect} />
+        ))}
+      </section>
+    );
+  }
+
+  // Catálogo "Todos los artistas": filas tipo chart (posición + avatar + chips).
+  function ArtistChart({ artists, onSelect }) {
+    if (!artists || artists.length === 0) {
+      return (
+        <div className="center" style={{ padding: "30px 0", color: "#9aa3b5" }}>
+          <p><strong>Sin resultados.</strong></p>
+          <p>Prueba con otro nombre o ajusta los filtros.</p>
+        </div>
+      );
+    }
+    return (
+      <section className="chart-list">
+        {artists.map((a, i) => (
+          <button
+            key={String(a.id) + a.name}
+            type="button"
+            className={"chart-row" + (i < 3 ? " top" : "")}
+            onClick={(e) => onSelect && onSelect(a, e.currentTarget.getBoundingClientRect())}
+            title="Ver detalle"
+          >
+            <span className="chart-pos">{i + 1}</span>
+            <img
+              src={a.image}
+              alt=""
+              loading="lazy"
+              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = window.ArtistModel.fallbackImg; }}
+            />
+            <span className="chart-body">
+              <strong>{a.name}</strong>
+              <span className="chips">
+                <span className="chip chip-accent">{a.genre}</span>
+                <span className="chip">{a.country}</span>
+              </span>
+            </span>
+            <span className="chart-cta" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            </span>
+          </button>
         ))}
       </section>
     );
@@ -150,7 +281,13 @@ window.ArtistaViews = (function () {
           </div>
         </div>
         {loading ? (
-          <div className="loader"><span className="spinner" /> Cargando…</div>
+          <div className="rail-track">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div className="rail-item" key={i}>
+                <SkeletonCard />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="rail-track" ref={trackRef}>
             {artists.map((a, i) => (
@@ -168,7 +305,67 @@ window.ArtistaViews = (function () {
     );
   }
 
-  // Menú lateral: Inicio / favoritos / playlists.
+  // Skeleton de tarjeta (carga percepción más rápida que el spinner).
+  function SkeletonCard() {
+    return (
+      <div className="sk sk-card">
+        <div className="sk-media" />
+        <div className="sk-body">
+          <span className="sk-line w70" />
+          <span className="sk-line w45" />
+        </div>
+      </div>
+    );
+  }
+
+  function SkeletonGrid({ n = 8 }) {
+    return (
+      <section className="grid">
+        {Array.from({ length: n }, (_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </section>
+    );
+  }
+
+  function SkeletonChart({ n = 8 }) {
+    return (
+      <section className="chart-list">
+        {Array.from({ length: n }, (_, i) => (
+          <div className="sk sk-row" key={i}>
+            <span className="sk-line sk-num" />
+            <span className="sk-avatar" />
+            <span className="sk-body" style={{ flex: 1, padding: 0 }}>
+              <span className="sk-line w70" />
+              <span className="sk-line w45" />
+            </span>
+          </div>
+        ))}
+      </section>
+    );
+  }
+
+  // Sidebar fijo con iconos: navegación principal + social + usuario.
+  const SIDE_ICONS = {
+    home: "M12 3.2 3 11h2.5v9h5v-6h3v6h5v-9H21z",
+    discover: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z",
+    favorites:
+      "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
+    favSongs: "M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z",
+    playlists: "M3 6h12v2H3V6zm0 4h12v2H3v-2zm0 4h8v2H3v-2zm14-1v7.2l5-3.1z",
+    support:
+      "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2v2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41a2 2 0 1 0-4 0H8a4 4 0 1 1 8 0c0 .88-.36 1.68-.93 2.25z",
+    social:
+      "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
+    settings:
+      "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.08-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+  };
+  const SideIcon = ({ name }) => (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d={SIDE_ICONS[name]} />
+    </svg>
+  );
+
   function SideMenu({ open, view, user, plan, favCount, songFavCount, plCount, onGo, onClose, onUsers, onLogout, onOpenMyProfile, onGoSettings, social, onAddFriend, onRespondFriend, onRemoveFriend, onOpenFriend }) {
     const [socialOpen, setSocialOpen] = useState(true);
     const [friendEmail, setFriendEmail] = useState("");
@@ -180,64 +377,55 @@ window.ArtistaViews = (function () {
       }
     };
     const initials = (n) => String(n || "?").charAt(0).toUpperCase();
+    const nav = [
+      { key: "home", label: "Inicio", icon: "home" },
+      { key: "discover", label: "Descubrir", icon: "discover" },
+      { key: "favorites", label: "Favoritos", icon: "favorites", count: favCount, full: "Mis artistas favoritos" },
+      { key: "favSongs", label: "Canciones", icon: "favSongs", count: songFavCount, full: "Mis canciones favoritas" },
+      { key: "playlists", label: "Playlists", icon: "playlists", count: plCount, full: "Playlists" },
+      { key: "support", label: "Soporte", icon: "support", full: "Soporte" },
+    ];
     return (
       <React.Fragment>
         <div className={"drawer-scrim" + (open ? " open" : "")} onClick={onClose} />
-        <aside
-          className={"drawer" + (open ? " open" : "")}
-          aria-label="Menú"
-          onMouseLeave={onClose}
-        >
+        <aside className={"drawer" + (open ? " open" : "")} aria-label="Menú">
           <div className="drawer-head">
-            <strong>Menú</strong>
-            <button type="button" onClick={onClose} aria-label="Cerrar">✕</button>
+            <button
+              type="button"
+              className="side-logo"
+              onClick={() => {
+                onGo("home");
+                onClose();
+              }}
+              title="Ir al inicio"
+            >
+              <span className="disc">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
+              </span>
+              <span className="side-logo-txt">
+                uBeat
+                <small>Descubre cantantes</small>
+              </span>
+            </button>
+            <button type="button" className="side-close" onClick={onClose} aria-label="Cerrar menú">✕</button>
           </div>
           <div className="drawer-nav">
-          <button
-            type="button"
-            className={view === "home" ? "drawer-item active" : "drawer-item"}
-            onClick={() => onGo("home")}
-          >
-            Inicio
-          </button>
-          <button
-            type="button"
-            className={view === "discover" ? "drawer-item active" : "drawer-item"}
-            onClick={() => onGo("discover")}
-          >
-            Descubrir
-          </button>
-          <button
-            type="button"
-            className={view === "favorites" ? "drawer-item active" : "drawer-item"}
-            onClick={() => onGo("favorites")}
-          >
-            Mis artistas favoritos
-            {user && favCount > 0 ? ` (${favCount})` : ""}
-          </button>
-          <button
-            type="button"
-            className={view === "favSongs" ? "drawer-item active" : "drawer-item"}
-            onClick={() => onGo("favSongs")}
-          >
-            Mis canciones favoritas
-            {user && songFavCount > 0 ? ` (${songFavCount})` : ""}
-          </button>
-          <button
-            type="button"
-            className={view === "playlists" ? "drawer-item active" : "drawer-item"}
-            onClick={() => onGo("playlists")}
-          >
-            Playlists
-            {user && plCount > 0 ? ` (${plCount})` : ""}
-          </button>
-          <button
-            type="button"
-            className={view === "support" ? "drawer-item active" : "drawer-item"}
-            onClick={() => onGo("support")}
-          >
-            Soporte
-          </button>
+            {nav.map((n) => (
+              <button
+                key={n.key}
+                type="button"
+                title={n.full || n.label}
+                className={view === n.key ? "drawer-item active" : "drawer-item"}
+                onClick={() => {
+                  onGo(n.key);
+                  onClose();
+                }}
+              >
+                <SideIcon name={n.icon} />
+                <span className="side-label">{n.label}</span>
+                {user && n.count > 0 ? <span className="side-count">{n.count}</span> : null}
+              </button>
+            ))}
           </div>
           {plan === "pro" ? (
           <div className="drawer-social">
@@ -246,7 +434,8 @@ window.ArtistaViews = (function () {
               className="drawer-item social-head"
               onClick={() => setSocialOpen((o) => !o)}
             >
-              <span>Social{social && social.friends.length > 0 ? ` (${social.friends.length})` : ""}</span>
+              <SideIcon name="social" />
+              <span className="side-label">Social{social && social.friends.length > 0 ? ` (${social.friends.length})` : ""}</span>
               <span>{socialOpen ? "▾" : "▸"}</span>
             </button>
             <div className={"social-body" + (socialOpen ? " open" : "")}>
@@ -304,7 +493,8 @@ window.ArtistaViews = (function () {
           ) : (
           <div className="drawer-social drawer-social-locked">
             <button type="button" className="drawer-item social-head" onClick={onGoSettings}>
-              <span>Social</span>
+              <SideIcon name="social" />
+              <span className="side-label">Social</span>
               <span className="pill-pro">PRO</span>
             </button>
             <div className="social-body open">
@@ -314,24 +504,28 @@ window.ArtistaViews = (function () {
           </div>
           )}
           <div className="drawer-foot">
+            <button
+              type="button"
+              className={view === "settings" ? "drawer-item active" : "drawer-item"}
+              onClick={() => {
+                onGoSettings();
+                onClose();
+              }}
+            >
+              <SideIcon name="settings" />
+              <span className="side-label">Ajustes</span>
+            </button>
             {user ? (
-              <React.Fragment>
-                <button type="button" className="user-open" onClick={onOpenMyProfile}>
-                  <span className="avatar sm">{initials(user.name)}</span>
-                  <span className="fname">{user.name}</span>
-                </button>
-                <button type="button" className="icon-btn sm" onClick={onGoSettings} aria-label="Ajustes" title="Ajustes">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.08-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
-                </button>
-              </React.Fragment>
+              <button type="button" className="user-open" onClick={onOpenMyProfile} title="Mi perfil">
+                <span className="avatar sm">{initials(user.name)}</span>
+                <span className="fname">{user.name}</span>
+                {plan === "pro" ? <span className="pill-pro">PRO</span> : null}
+              </button>
             ) : (
-              <React.Fragment>
-                <span>Sin sesión iniciada</span>
-                <button type="button" className="link" onClick={onUsers}>Log in</button>
-                <button type="button" className="icon-btn sm" onClick={onGoSettings} aria-label="Ajustes" title="Ajustes">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.08-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
-                </button>
-              </React.Fragment>
+              <button type="button" className="user-open" onClick={onUsers} title="Iniciar sesión">
+                <span className="avatar sm">?</span>
+                <span className="fname">Inicia sesión</span>
+              </button>
             )}
           </div>
         </aside>
@@ -501,7 +695,7 @@ window.ArtistaViews = (function () {
   }) {
     const targetRect = () => {
       const w = Math.min(880, window.innerWidth * 0.92);
-      const h = Math.min(460, window.innerHeight * 0.82);
+      const h = Math.min(700, window.innerHeight * 0.86);
       return {
         left: (window.innerWidth - w) / 2,
         top: (window.innerHeight - h) / 2,
@@ -524,7 +718,7 @@ window.ArtistaViews = (function () {
     }, []);
 
     useEffect(() => {
-      if (closing) setStyle((s) => ({ ...s, ...rect }));
+      if (closing) setStyle((s) => ({ ...s, opacity: 0, transform: "scale(0.93)" }));
     }, [closing]);
 
     const [img, setImg] = useState(artist.image);
@@ -594,19 +788,28 @@ window.ArtistaViews = (function () {
             <h2>{artist.name}</h2>
             <div className="meta">
               <span><span className="k">País</span><br /><b>{artist.country}</b></span>
-              <span><span className="k">Género</span><br /><b>{artist.genre}</b></span>
             </div>
             <span className="tag">{artist.genre}</span>
 
             <div className="rate-box">
-              <p className="detail-eyebrow">Tu nota</p>
-              <div className="rate-row">
+              <div className="rate-head">
+                <p className="detail-eyebrow">Tu nota al artista</p>
+                <span className={"rate-score" + (rating === null || rating === undefined ? " empty" : "")}>
+                  {rating === null || rating === undefined ? "—" : `${rating}/10`}
+                </span>
+              </div>
+              <div className="rate-row" role="group" aria-label="Puntuación de 0 a 10">
                 {Array.from({ length: 11 }, (_, n) => (
                   <button
                     key={n}
                     type="button"
-                    className={"rate-btn" + (rating === n ? " active" : "")}
+                    className={
+                      "rate-btn" +
+                      (rating !== null && rating !== undefined && n <= rating ? " filled" : "") +
+                      (rating === n ? " active" : "")
+                    }
                     onClick={() => onRate && onRate(n)}
+                    aria-pressed={rating === n}
                     aria-label={`Puntuar ${n} de 10`}
                   >
                     {n}
@@ -614,10 +817,10 @@ window.ArtistaViews = (function () {
                 ))}
               </div>
               <div className="rate-foot">
-                <span className="muted">
+                <span>
                   {rating === null || rating === undefined
-                    ? "Sin puntuar · 0 a 10"
-                    : `Tu nota: ${rating}/10`}
+                    ? "Sin puntuar · elige de 0 a 10"
+                    : `Valoración: ${rating <= 3 ? "Flojo" : rating <= 6 ? "Regular" : rating <= 8 ? "Muy bueno" : "Excelente"}`}
                 </span>
                 {rating !== null && rating !== undefined ? (
                   <button type="button" className="link" onClick={() => onRate && onRate(null)}>
@@ -668,6 +871,9 @@ window.ArtistaViews = (function () {
                     max="1"
                     step="0.01"
                     value={progress}
+                    style={{
+                      background: `linear-gradient(90deg, var(--accent) ${Math.round(progress * 100)}%, var(--surface-3) ${Math.round(progress * 100)}%)`,
+                    }}
                     onChange={(e) => seek(Number(e.target.value))}
                     aria-label="Progreso"
                   />
@@ -1018,8 +1224,19 @@ window.ArtistaViews = (function () {
     // El feed cubre la pantalla: bloquea el scroll del documento.
     useEffect(() => {
       document.body.style.overflow = "hidden";
+      // Mide el topbar real (en móvil su altura es variable) y fija el borde
+      // superior del feed para que no se solape.
+      const setTop = () => {
+        const tb = document.querySelector(".topbar");
+        const h = tb ? tb.getBoundingClientRect().bottom : 64;
+        document.documentElement.style.setProperty("--feed-top", `${Math.max(h, 0)}px`);
+      };
+      setTop();
+      window.addEventListener("resize", setTop);
       return () => {
         document.body.style.overflow = "";
+        window.removeEventListener("resize", setTop);
+        document.documentElement.style.removeProperty("--feed-top");
       };
     }, []);
 
@@ -1382,7 +1599,13 @@ window.ArtistaViews = (function () {
           </div>
         </div>
         {loading ? (
-          <div className="loader"><span className="spinner" /> Cargando…</div>
+          <div className="rail-track">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div className="rail-item" key={i}>
+                <SkeletonCard />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="rail-track" ref={trackRef}>
             {items.map((it, i) => (
@@ -1478,43 +1701,47 @@ window.ArtistaViews = (function () {
     );
   }
 
-  // Portada: carrusel a pantalla completa con las fotos de los artistas.
-  // Al pulsar "Entrar", la App aplica la transición de salida (.leaving).
-  function Landing({ artists, leaving, onEnter }) {
-    const photos = (artists || []).filter((a) => a.image).slice(0, 12);
+  // Hero de Inicio: carrusel de fotos con titular y acceso al catálogo.
+  // La app ya entra directo (sin pantalla de bienvenida con botón).
+  function Hero({ artists }) {
+    const photos = (artists || []).filter((a) => a.image).slice(0, 8);
     const [idx, setIdx] = useState(0);
 
     useEffect(() => {
       if (photos.length < 2) return undefined;
-      const t = setInterval(
-        () => setIdx((i) => (i + 1) % photos.length),
-        2800
-      );
+      const t = setInterval(() => setIdx((i) => (i + 1) % photos.length), 3800);
       return () => clearInterval(t);
     }, [photos.length]);
 
+    if (!photos.length) return null;
+    const scrollToCatalog = () => {
+      const el = document.querySelector(".todos-scroll");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      else window.scrollTo({ top: 0, behavior: "smooth" });
+    };
     return (
-      <div className={"landing" + (leaving ? " leaving" : "")}>
-        <div className="slides">
+      <section className="hero" aria-label="Destacados">
+        <div className="hero-slides">
           {photos.map((p, i) => (
             <div
               key={String(p.id) + i}
-              className={"slide" + (i === idx ? " active" : "")}
+              className={"hero-slide" + (i === idx ? " active" : "")}
               style={{ backgroundImage: `url("${p.image}")` }}
             />
           ))}
         </div>
-        <div className="landing-shade" />
-        <div className="landing-content">
-          <div className="landing-eyebrow">Catálogo de artistas</div>
-          <div className="landing-logo">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
+        <div className="hero-shade" />
+        <div className="hero-content">
+          <span className="hero-eyebrow">Catálogo de artistas</span>
+          <h1>
+            Descubre cantantes <em>uBeat</em>
+          </h1>
+          <p>País, género e imagen de cada artista, rankings y favoritos — sin esperas.</p>
+          <div className="hero-actions">
+            <button className="btn" type="button" onClick={scrollToCatalog}>
+              Explorar catálogo
+            </button>
           </div>
-          <h1>uBeat</h1>
-          <p>Consulta la información esencial de cada artista: país, género e imagen.</p>
-          <button className="btn big" onClick={onEnter}>
-            Entrar
-          </button>
           {photos.length > 1 ? (
             <div className="dots">
               {photos.map((p, i) => (
@@ -1527,7 +1754,7 @@ window.ArtistaViews = (function () {
             </div>
           ) : null}
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -1700,7 +1927,7 @@ window.ArtistaViews = (function () {
             </div>
             <div className={"plan-box pro" + (isPro ? " active" : "")}>
               <strong>PRO <span className="pill-pro">Recomendado</span></strong>
-              <span className="plan-price">7,99 €<small>/mes</small></span>
+              <span className="plan-price">3,99 €<small>/mes</small></span>
               <ul>
                 <li>Todo lo del plan gratuito</li>
                 <li>Social: amigos y su actividad</li>
@@ -1719,7 +1946,7 @@ window.ArtistaViews = (function () {
             </div>
           ) : user ? (
             <div className="row-actions">
-              <button type="button" className="btn" onClick={onShowCheckout}>Hazte PRO — 7,99 €/mes</button>
+              <button type="button" className="btn" onClick={onShowCheckout}>Hazte PRO — 3,99 €/mes</button>
             </div>
           ) : (
             <div className="row-actions">
@@ -1857,7 +2084,7 @@ window.ArtistaViews = (function () {
               <p className="muted">Demo de pago simulado: no se cobra nada de verdad.</p>
               <div className="checkout-summary">
                 <span>Plan PRO · suscripción mensual</span>
-                <strong>7,99 €/mes</strong>
+                <strong>3,99 €/mes</strong>
               </div>
               <label className="field">
                 <span>Número de tarjeta</span>
@@ -1868,7 +2095,7 @@ window.ArtistaViews = (function () {
                   Volver
                 </button>
                 <button type="button" className="btn" onClick={onUpgrade} disabled={savingPlan}>
-                  {savingPlan ? "Procesando…" : "Pagar 7,99 €"}
+                  {savingPlan ? "Procesando…" : "Pagar 3,99 €"}
                 </button>
               </div>
               {planError ? <div className="error sm">{planError}</div> : null}
@@ -1898,7 +2125,7 @@ window.ArtistaViews = (function () {
         </ul>
         <div className="row-actions center">
           {user ? (
-            <button type="button" className="btn big" onClick={onSettings}>Hazte PRO — 7,99 €/mes</button>
+            <button type="button" className="btn big" onClick={onSettings}>Hazte PRO — 3,99 €/mes</button>
           ) : (
             <React.Fragment>
               <button type="button" className="btn big" onClick={onLogin}>Iniciar sesión</button>
@@ -2097,6 +2324,105 @@ window.ArtistaViews = (function () {
     );
   }
 
+  // Botón flotante con chat rápido del asistente de soporte. Comparte la
+  // conversación con la vista Soporte (estado en el controlador).
+  function SupportFab({ messages, loading, error, onAsk, raised }) {
+    const [open, setOpen] = useState(false);
+    const [question, setQuestion] = useState("");
+    const logRef = useRef(null);
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+      if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+    }, [messages, loading, open]);
+
+    useEffect(() => {
+      if (!open) return undefined;
+      if (inputRef.current) inputRef.current.focus();
+      const onKey = (e) => {
+        if (e.key === "Escape") setOpen(false);
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [open]);
+
+    const ask = (e) => {
+      e.preventDefault();
+      const q = question.trim();
+      if (!q || loading) return;
+      setQuestion("");
+      onAsk(q);
+    };
+    const last = messages[messages.length - 1];
+    const chips = last && last.role === "bot" && last.suggestions && last.suggestions.length
+      ? last.suggestions
+      : SUPPORT_CHIPS;
+
+    return (
+      <div className={"chat-wrap" + (raised ? " raised" : "")}>
+        {open ? (
+          <div className="chat-panel" role="dialog" aria-label="Asistente de soporte">
+            <div className="chat-head">
+              <span className="chat-dot" aria-hidden="true" />
+              <strong>Asistente IA</strong>
+              <button type="button" className="icon-btn" aria-label="Cerrar chat" onClick={() => setOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="chat-log" ref={logRef}>
+              {messages.length === 0 ? (
+                <div className="ai-msg bot">
+                  ¡Hola! Pregúntame, por ejemplo, «¿Cuál es el artista mejor valorado de la app?».
+                </div>
+              ) : (
+                messages.map((m, i) => (
+                  <div key={i} className={"ai-msg " + m.role}>
+                    {m.text}
+                  </div>
+                ))
+              )}
+              {loading ? <div className="ai-msg bot">Pensando…</div> : null}
+            </div>
+            {error ? <div className="error sm">{error}</div> : null}
+            <div className="ai-suggestions">
+              {chips.map((c) => (
+                <button key={c} type="button" className="ai-chip" onClick={() => onAsk(c)} disabled={loading}>
+                  {c}
+                </button>
+              ))}
+            </div>
+            <form className="ai-form" onSubmit={ask}>
+              <input
+                ref={inputRef}
+                type="text"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Pregunta rápida…"
+                maxLength={400}
+                aria-label="Pregunta para el asistente"
+              />
+              <button className="btn" type="submit" disabled={loading || !question.trim()}>
+                {loading ? "…" : "Enviar"}
+              </button>
+            </form>
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className="fab-chat"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={open ? "Cerrar chat de soporte" : "Abrir chat de soporte"}
+          aria-expanded={open}
+          title="Pregunta rápida al asistente"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
   function Footer({ onCookies }) {
     return (
       <footer className="footer">
@@ -2131,5 +2457,5 @@ window.ArtistaViews = (function () {
     );
   }
 
-  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView };
+  return { SearchBar, SourcePill, ArtistCard, ArtistGrid, ArtistChart, ArtistDetail, Loader, Hero, SkeletonCard, SkeletonGrid, SkeletonChart, FilterDropdown, Footer, Rail, SideMenu, AuthModal, HeartButton, SongRow, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView, SupportFab };
 })();

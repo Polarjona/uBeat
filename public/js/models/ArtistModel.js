@@ -467,12 +467,13 @@
       };
     },
 
-    async search(name, { country = "", genre = "" } = {}) {
+    async search(name, { country = "", genre = "", limit = 0 } = {}) {
       const q = (name || "").trim();
       if (!q) throw new Error("Escribe el nombre de un artista.");
       const p = new URLSearchParams({ search: q });
       if (country) p.set("country", country);
       if (genre) p.set("genre", genre);
+      if (limit > 0) p.set("limit", String(limit));
       const res = await fetch(`/api/artists?${p.toString()}`);
       const data = await handle(res);
       return {

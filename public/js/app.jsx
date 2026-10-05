@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistChart, ArtistDetail, Loader, Hero, SkeletonGrid, SkeletonChart, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView, SupportFab } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -20,7 +20,6 @@ function App() {
     showFilters: false,
     showUser: false,
     view: "home",
-    drawer: false,
     authModal: false,
     authMode: "login",
     authLoading: false,
@@ -87,8 +86,7 @@ function App() {
     discoverError: "",
     barFromDiscover: false,
     pageColor: "",
-    entered: false,
-    leaving: false,
+    sideOpen: false,
     detail: null,
     detailClosing: false,
     previewTracks: [],
@@ -142,9 +140,28 @@ function App() {
     );
     ob.observe(el);
     return () => ob.disconnect();
-  }, [state.view, state.entered, state.country, state.genre, state.query]);
+  }, [state.view, state.country, state.genre, state.query]);
 
   const setQuery = (v) => setState((s) => ({ ...s, query: v }));
+
+  // Atajo de teclado: "/" enfoca el buscador (si no se está escribiendo ya).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = document.activeElement;
+      const tag = t && t.tagName ? t.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea" || tag === "select" || (t && t.isContentEditable))
+        return;
+      const input = document.getElementById("global-search");
+      if (input) {
+        e.preventDefault();
+        input.focus();
+        if (input.select) input.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Tema claro / oscuro con persistencia.
   useEffect(() => {
@@ -341,30 +358,23 @@ function App() {
 
   return (
     <React.Fragment>
+      <div className="content">
       <header className="topbar">
         <div className="topbar-inner">
-          <div
-            className="logo clickable"
-            onClick={() => {
-              ctrlRef.current.clearFilters();
-              ctrlRef.current.go("home");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            title="Ir al inicio"
+          <button
+            className="icon-btn hamburger"
+            type="button"
+            aria-label="Abrir menú"
+            onClick={() => setState((s) => ({ ...s, sideOpen: true }))}
           >
-            <span className="disc">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
-            </span>
-            <span>
-              uBeat
-              <small>{state.total > 0 ? `${state.total} artistas` : "Catálogo de artistas"}</small>
-            </span>
-          </div>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" /></svg>
+          </button>
           <SearchBar
             value={state.query}
             onChange={setQuery}
             onSearch={() => ctrlRef.current.search()}
             loading={state.loading}
+            onPick={(a, r) => openDetail(a, r)}
           />
           {state.user ? (
             <div className="filters-wrap">
@@ -430,15 +440,6 @@ function App() {
           </button>
         </div>
       </header>
-
-      {state.entered && !state.authModal && !state.detail && !state.profileCard ? (
-        <div
-          className="hover-edge"
-          onMouseEnter={() => setState((s) => ({ ...s, drawer: true }))}
-          onClick={() => setState((s) => ({ ...s, drawer: true }))}
-          aria-hidden="true"
-        />
-      ) : null}
 
       <main>
         {state.resetOob ? (
@@ -680,6 +681,7 @@ function App() {
           <React.Fragment>
             {showRails ? (
               <React.Fragment>
+                <Hero artists={state.chartsSpain.length ? state.chartsSpain : state.artists} />
                 {state.user && (state.forYou.length > 0 || state.loadingForYou) ? (
                   <Rail
                     title="Para ti"
@@ -737,14 +739,24 @@ function App() {
               ) : null}
             </div>
 
-            {showRails ? <h2 className="section-title">Todos los artistas</h2> : null}
+            {showRails ? (
+              <div className="catalog-head">
+                <div>
+                  <p className="detail-eyebrow">Catálogo completo</p>
+                  <h2 className="section-title">Todos los artistas</h2>
+                </div>
+                <span className="catalog-count">
+                  {state.total > 0 ? `${state.total} en total` : ""}
+                </span>
+              </div>
+            ) : null}
 
             {state.error ? <div className="error">{state.error}</div> : null}
             <div className="todos-scroll" ref={todosRef}>
               {state.loading && state.artists.length === 0 ? (
-                <Loader />
+                <SkeletonChart n={8} />
               ) : (
-                <ArtistGrid artists={state.artists} onSelect={openDetail} />
+                <ArtistChart artists={state.artists} onSelect={openDetail} />
               )}
               {state.loading && state.artists.length > 0 ? <Loader /> : null}
               <div ref={sentinelRef} className="sentinel" />
@@ -757,8 +769,9 @@ function App() {
       </main>
 
       <Footer onCookies={() => ctrlRef.current.reopenCookies()} />
+      </div>
 
-      {state.entered && !state.cookies && !state.cookiesDismissed ? (
+      {!state.cookies && !state.cookiesDismissed ? (
         <CookieBanner
           onAcceptAll={() => ctrlRef.current.acceptCookies()}
           onSave={(d) => ctrlRef.current.saveCookiePrefs(d)}
@@ -767,19 +780,22 @@ function App() {
       ) : null}
 
       <SideMenu
-        open={state.drawer}
+        open={state.sideOpen}
         view={state.view}
         user={state.user}
         plan={state.plan}
         favCount={state.likeIds.length}
         songFavCount={state.songLikeIds.length}
         plCount={state.playlists.length}
-        onGo={(v) => ctrlRef.current.go(v)}
-        onClose={() => setState((s) => ({ ...s, drawer: false }))}
-        onUsers={() => setState((s) => ({ ...s, drawer: false, authModal: true, authError: "" }))}
+        onGo={(v) => {
+          ctrlRef.current.go(v);
+          setState((s) => ({ ...s, sideOpen: false }));
+        }}
+        onClose={() => setState((s) => ({ ...s, sideOpen: false }))}
+        onUsers={() => setState((s) => ({ ...s, sideOpen: false, authModal: true, authError: "" }))}
         onLogout={() => {
           ctrlRef.current.logout();
-          setState((s) => ({ ...s, drawer: false }));
+          setState((s) => ({ ...s, sideOpen: false }));
         }}
         onOpenMyProfile={() => ctrlRef.current.openMyProfile()}
         onGoSettings={() => ctrlRef.current.go("settings")}
@@ -875,11 +891,13 @@ function App() {
         />
       ) : null}
 
-      {!state.entered ? (
-        <Landing
-          artists={state.artists}
-          leaving={state.leaving}
-          onEnter={() => ctrlRef.current.enter()}
+      {state.view !== "support" && state.view !== "discover" ? (
+        <SupportFab
+          messages={state.aiMessages}
+          loading={state.aiLoading}
+          error={state.aiError}
+          onAsk={(q) => ctrlRef.current.askSupport(q)}
+          raised={state.barQueue.length > 0}
         />
       ) : null}
     </React.Fragment>
