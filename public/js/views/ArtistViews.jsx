@@ -694,10 +694,13 @@ window.ArtistaViews = (function () {
     onRate,
   }) {
     const targetRect = () => {
-      const w = Math.min(880, window.innerWidth * 0.92);
+      const content = document.querySelector(".content");
+      const off = content ? parseFloat(getComputedStyle(content).marginLeft) || 0 : 0;
+      const availW = Math.max(360, window.innerWidth - off);
+      const w = Math.min(880, availW * 0.94);
       const h = Math.min(700, window.innerHeight * 0.86);
       return {
-        left: (window.innerWidth - w) / 2,
+        left: off + (availW - w) / 2,
         top: (window.innerHeight - h) / 2,
         width: w,
         height: h,

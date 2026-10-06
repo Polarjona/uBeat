@@ -236,6 +236,15 @@
   margin-bottom: 3px;
 }
 
+.card-body h3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+  min-height: calc(2 * 1.3em);
+}
+
 .meta { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
 .meta .k { opacity: 0.75; }
 
@@ -477,9 +486,25 @@
 
 .rail-wrap { position: relative; }
 
-.rail-item { position: relative; width: 178px; flex-shrink: 0; }
-.rail-item .card, .rail-item .sk { width: 100%; }
+.rail-item {
+  position: relative;
+  width: 178px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rail-item .card, .rail-item .sk { width: 100%; flex: 1; }
 .rail-item .sk-media { height: auto; aspect-ratio: 1; }
+.rail-item .card { display: flex; flex-direction: column; }
+.rail-item .card .card-media { flex-shrink: 0; }
+.rail-item .card .card-body { flex: 1; }
+.rail-item .chips { flex-direction: column; align-items: flex-start; }
+.rail-item .chip {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .rail-pos {
   position: absolute;
@@ -501,8 +526,12 @@
 }
 
 .rail-reason {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   margin-top: 7px;
+  min-height: calc(2 * 1.45em);
   font-size: 11.5px;
   color: var(--accent-2);
   line-height: 1.45;
@@ -1904,7 +1933,7 @@
   .dots { bottom: 12px; right: 14px; }
 
   .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
-  .rail .card, .rail .sk { width: 150px; }
+  .rail-item { width: 150px; }
   .card-cta { transform: none; opacity: 1; width: 38px; height: 38px; }
 
   .catalog-head { flex-wrap: wrap; gap: 10px; margin-top: 26px; }
