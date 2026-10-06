@@ -1548,6 +1548,7 @@
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   animation: rise 0.2s ease;
 }
 
@@ -1600,6 +1601,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 14px;
+  overflow: hidden;
   background: color-mix(in srgb, var(--surface) 97%, transparent);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -1645,6 +1647,20 @@
 .chat-panel .ai-suggestions,
 .chat-panel .ai-form { margin-top: 0; }
 
+.chat-panel .ai-suggestions {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 2px;
+}
+
+.chat-panel .ai-suggestions::-webkit-scrollbar { display: none; }
+
+.chat-panel .ai-chip { flex-shrink: 0; white-space: nowrap; }
+
+.chat-panel .ai-form { flex-wrap: nowrap; }
+.chat-panel .ai-form .btn { flex-shrink: 0; }
 .chat-panel .ai-form input { min-width: 0; }
 
 .fab-chat {
