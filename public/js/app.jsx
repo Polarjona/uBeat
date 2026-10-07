@@ -752,7 +752,7 @@ function App() {
                     className="btn ghost"
                     onClick={() => ctrlRef.current.loadAllPages()}
                   >
-                    Ver todos{state.total ? ` (${state.total})` : ""}
+                    Ver más{state.total ? ` (${state.total})` : ""}
                   </button>
                   <p className="muted">Se muestra una selección de 30 · carga completa por partes</p>
                 </div>
@@ -889,7 +889,9 @@ function App() {
         />
       ) : null}
 
-      {state.view !== "support" && state.view !== "discover" ? (
+      {(state.cookies || state.cookiesDismissed) &&
+      state.view !== "support" &&
+      state.view !== "discover" ? (
         <SupportFab
           messages={state.aiMessages}
           loading={state.aiLoading}

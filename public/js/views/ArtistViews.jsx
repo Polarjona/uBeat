@@ -1095,6 +1095,10 @@ window.ArtistaViews = (function () {
                 });
             }).catch(() => setBlocked(true));
           }
+        } else {
+          // Pausa activa: sin esta rama el audio seguía sonando aunque
+          // `playing` fuera false (el toggle no surtía efecto sonoro).
+          a.pause();
         }
       } else {
         wasActiveRef.current = false;
@@ -1193,7 +1197,7 @@ window.ArtistaViews = (function () {
           ) : null}
         </div>
 
-        <div className="disc-info" onClick={toggle}>
+        <div className="disc-info">
           <strong>{song.track}</strong>
           <span>{song.artist}</span>
         </div>

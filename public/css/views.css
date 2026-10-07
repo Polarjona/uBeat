@@ -5,7 +5,10 @@
 
 /* ---------- Estado de página ---------- */
 .status {
-  display: inline-block;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   margin-bottom: 14px;
   font-size: 13px;
   color: var(--muted);

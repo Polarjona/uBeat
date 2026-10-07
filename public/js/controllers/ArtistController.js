@@ -138,6 +138,18 @@
 
     // ---- Navegación ----
     function go(view) {
+      const st = getState();
+      // Al salir del catálogo expandido con "Ver más" se vuelve a colapsar
+      // a la primera página (30) para que el botón reaparezca al volver.
+      if (
+        view !== "home" &&
+        st.view === "home" &&
+        !(st.query || "").trim() &&
+        !st.hasMore &&
+        st.artists.length > PAGE_SIZE
+      ) {
+        setState((s) => ({ ...s, artists: s.artists.slice(0, PAGE_SIZE), hasMore: true }));
+      }
       setState((s) => ({ ...s, view, sideOpen: false }));
       if (view === "favorites") loadFavorites();
       if (view === "favSongs") {

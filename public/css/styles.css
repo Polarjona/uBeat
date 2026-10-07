@@ -1318,6 +1318,20 @@ code {
     padding: 10px 14px;
     gap: 10px;
   }
+  .topbar-inner .hamburger { margin-right: auto; }
+  .topbar-inner .user-btn { min-width: 0; }
+  .topbar-inner .user-btn .uname { max-width: 30vw; }
+  .topbar-inner .filters-btn { flex-shrink: 0; }
+  /* El ancla absoluta al botón se sale del viewport: en móvil el panel se
+     ancla al ancho de la pantalla (left/right 12px) justo debajo del botón. */
+  .topbar .filters-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: 272px;
+    margin-left: auto;
+  }
   .search {
     order: 3;
     margin-left: 0;
