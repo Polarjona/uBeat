@@ -367,7 +367,7 @@ window.ArtistaViews = (function () {
   );
 
   function SideMenu({ open, view, user, plan, favCount, songFavCount, plCount, onGo, onClose, onUsers, onLogout, onOpenMyProfile, onGoSettings, social, onAddFriend, onRespondFriend, onRemoveFriend, onOpenFriend }) {
-    const [socialOpen, setSocialOpen] = useState(true);
+    const [socialOpen, setSocialOpen] = useState(false);
     const [friendEmail, setFriendEmail] = useState("");
     const sendInvite = (e) => {
       e.preventDefault();
@@ -1066,25 +1066,38 @@ window.ArtistaViews = (function () {
     const [playing, setPlaying] = useState(true);
     const [blocked, setBlocked] = useState(false);
     const [progress, setProgress] = useState(0);
+    const wasActiveRef = useRef(false);
 
     useEffect(() => {
       const a = audioRef.current;
       if (!a) return undefined;
-      if (active && playing && !paused) {
-        const p = a.play();
-        if (p && p.catch) {
-          p.then(() => {
-            setBlocked(false);
-            if (onTrackStart)
-              onTrackStart({
-                artistId: song.artistId,
-                trackId: song.trackId,
-                track: song.track,
-                artist: song.artist,
-              });
-          }).catch(() => setBlocked(true));
+      if (active) {
+        if (!wasActiveRef.current) {
+          // Se volvió a la canción tras salir de ella (scrollear a otra y
+          // volver): empieza desde 0 en vez de continuar donde se quedó.
+          try {
+            a.currentTime = 0;
+          } catch (_) {}
+          setProgress(0);
+        }
+        wasActiveRef.current = true;
+        if (playing && !paused) {
+          const p = a.play();
+          if (p && p.catch) {
+            p.then(() => {
+              setBlocked(false);
+              if (onTrackStart)
+                onTrackStart({
+                  artistId: song.artistId,
+                  trackId: song.trackId,
+                  track: song.track,
+                  artist: song.artist,
+                });
+            }).catch(() => setBlocked(true));
+          }
         }
       } else {
+        wasActiveRef.current = false;
         a.pause();
       }
       return undefined;

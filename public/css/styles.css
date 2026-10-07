@@ -1132,7 +1132,7 @@ code {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 18px;
+  padding: 10px 18px calc(10px + env(safe-area-inset-bottom, 0px));
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
@@ -1325,7 +1325,7 @@ code {
     max-width: none;
     flex-basis: 100%;
   }
-  main { padding: 20px 16px 72px; }
+  main { padding: 20px 16px calc(72px + env(safe-area-inset-bottom, 0px)); }
   .footer-inner { grid-template-columns: 1fr; padding: 26px 16px 10px; }
-  .footer-bottom { padding: 12px 16px 24px; flex-wrap: wrap; }
+  .footer-bottom { padding: 12px 16px calc(24px + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; }
 }

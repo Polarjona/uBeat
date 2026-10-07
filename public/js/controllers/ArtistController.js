@@ -5,17 +5,17 @@
  * y actualiza el estado que la Vista pinta.
  */
 (function (global) {
-  const PAGE_SIZE = 24;
+  const PAGE_SIZE = 30;
 
   function createArtistController({ model, setState, getState }) {
     // ---- Catálogo paginado (scroll infinito) ----
-    async function fetchPage({ append = false, over = {} } = {}) {
+    async function fetchPage({ append = false, over = {}, offset: fixedOffset } = {}) {
       const st = { ...getState(), ...over };
       // Nota: sin bloqueo por `loading` aquí (loadMore ya lo comprueba);
       // bloquearlo dejaba el catálogo cargando para siempre al arrancar.
       setState((s) => ({ ...s, loading: true, error: "" }));
       try {
-        const offset = append ? st.artists.length : 0;
+        const offset = fixedOffset !== undefined ? fixedOffset : append ? st.artists.length : 0;
         const { artists, total, source } = await model.all({
           country: st.country,
           genre: st.genre,
@@ -33,8 +33,10 @@
             hasMore: list.length < total,
           };
         });
+        return { n: artists.length, total, hasMore: offset + artists.length < total };
       } catch (err) {
         setState((s) => ({ ...s, loading: false, error: err.message }));
+        return null;
       }
     }
 
@@ -47,6 +49,24 @@
       if (st.loading || !st.hasMore) return;
       if (st.view !== "home" || (st.query || "").trim()) return;
       return fetchPage({ append: true });
+    }
+
+    // Carga el catálogo completo a partir de "Ver todos": recorre la lista
+    // página a página (progresivo, tamaño PAGE_SIZE) hasta llegar al final.
+    // El offset se lleva en local: getState() queda desactualizado justo
+    // después de un await (stateRef solo se actualiza al re-renderizar).
+    async function loadAllPages() {
+      const st0 = getState();
+      if (st0.view !== "home" || (st0.query || "").trim() || !st0.hasMore || st0.loading) return;
+      let offset = st0.artists.length;
+      let hasMore = st0.hasMore;
+      let guard = 0;
+      while (hasMore && guard++ < 500) {
+        const r = await fetchPage({ append: true, offset });
+        if (!r || r.n === 0) break;
+        offset += r.n;
+        hasMore = r.hasMore;
+      }
     }
 
     async function loadFilters() {
@@ -914,6 +934,7 @@
     return {
       loadAll,
       loadMore,
+      loadAllPages,
       loadFilters,
       loadCharts,
       setFilter,

@@ -125,22 +125,9 @@ function App() {
     setState((s) => ({ ...s, cookies: ctrlRef.current.readCookieChoice() }));
   }, []);
 
-  // Scroll infinito: carga más tarjetas al acercarse al final.
-  // El observador usa como raíz el panel de "Todos" (scroll interno).
-  const sentinelRef = useRef(null);
+  // "Ver todos": carga el resto del catálogo página a página bajo demanda
+  // (sin scroll automático: la lista inicial son 30 tarjetas).
   const todosRef = useRef(null);
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return undefined;
-    const ob = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) ctrlRef.current.loadMore();
-      },
-      { root: todosRef.current, rootMargin: "600px" }
-    );
-    ob.observe(el);
-    return () => ob.disconnect();
-  }, [state.view, state.country, state.genre, state.query]);
 
   const setQuery = (v) => setState((s) => ({ ...s, query: v }));
 
@@ -758,8 +745,19 @@ function App() {
               ) : (
                 <ArtistChart artists={state.artists} onSelect={openDetail} />
               )}
+              {state.hasMore && state.artists.length > 0 && !state.loading && !(state.query || "").trim() ? (
+                <div className="todos-more">
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => ctrlRef.current.loadAllPages()}
+                  >
+                    Ver todos{state.total ? ` (${state.total})` : ""}
+                  </button>
+                  <p className="muted">Se muestra una selección de 30 · carga completa por partes</p>
+                </div>
+              ) : null}
               {state.loading && state.artists.length > 0 ? <Loader /> : null}
-              <div ref={sentinelRef} className="sentinel" />
               {!state.hasMore && state.artists.length > 0 && !(state.query || "").trim() ? (
                 <p className="muted center">Has llegado al final del catálogo.</p>
               ) : null}

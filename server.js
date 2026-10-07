@@ -725,6 +725,15 @@ app.post("/api/auth/captcha", async (req, res) => {
 });
 
 // ---------- Me gusta ----------
+// Caché de /api/for-you por usuario (30 s): los clics de "Me gusta" y las
+// escuchas la invalidan para esa uid, así el rail no relee Firestore en
+// cada interacción. Declarado aquí para poder invalidarlo desde los handlers.
+const FORYOU_TTL_MS = 30e3;
+const forYouCache = new Map(); // uid -> { at, data }
+function invalidateForYou(uid) {
+  if (uid) forYouCache.delete(String(uid));
+}
+
 app.post("/api/likes", async (req, res) => {
   try {
     const uid = await authUid(req);
@@ -737,6 +746,7 @@ app.post("/api/likes", async (req, res) => {
     if (cur.exists) {
       await ref.delete();
       invalidateAiCache();
+      invalidateForYou(uid);
       return res.json({ ok: true, liked: false });
     }
     const a = await db.collection(COLLECTION).doc(artistId).get();
@@ -753,6 +763,7 @@ app.post("/api/likes", async (req, res) => {
       createdAt: new Date().toISOString(),
     });
     invalidateAiCache();
+    invalidateForYou(uid);
     res.json({ ok: true, liked: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1101,6 +1112,10 @@ async function similarIds(artist, allDocs) {
 
 // POST /api/plays {artistId?, trackId?, track?, artist?} -> +1 escucha
 // (solo plan PRO: alimenta el algoritmo).
+// Dedupe en memoria (45 s por uid+artista): el autoplay del feed dispara una
+// escucha por canción y el dedupe evita escrituras duplicadas en Firestore.
+const PLAY_DEDUPE_MS = 45e3;
+const lastPlayWrite = new Map(); // "uid|artistId" -> timestamp
 app.post("/api/plays", async (req, res) => {
   try {
     const uid = await proUid(req, res);
@@ -1114,12 +1129,22 @@ app.post("/api/plays", async (req, res) => {
       if (hit) artistId = String(hit.id);
     }
     if (!artistId) return res.json({ ok: true, logged: false });
+    const pkey = `${uid}|${artistId}`;
+    const prev = lastPlayWrite.get(pkey);
+    const now = Date.now();
+    if (prev && now - prev < PLAY_DEDUPE_MS) {
+      invalidateForYou(uid);
+      return res.json({ ok: true, logged: true, deduped: true });
+    }
+    if (lastPlayWrite.size > 20000) lastPlayWrite.clear();
+    lastPlayWrite.set(pkey, now);
     const ref = db.collection(TASTE_COL).doc(`${uid}_${artistId}`);
     await db.runTransaction(async (tx) => {
       const cur = await tx.get(ref);
       const plays = cur.exists ? Number(cur.data().plays || 0) + 1 : 1;
       tx.set(ref, { uid, artistId, plays, updatedAt: new Date().toISOString() }, { merge: true });
     });
+    invalidateForYou(uid);
     res.json({ ok: true, logged: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1131,6 +1156,8 @@ app.get("/api/for-you", async (req, res) => {
   try {
     const uid = await proUid(req, res);
     if (!uid) return;
+    const hit = forYouCache.get(uid);
+    if (hit && Date.now() - hit.at < FORYOU_TTL_MS) return res.json(hit.data);
     const all = await allArtistsDocs();
     const byId = new Map(all.map((a) => [String(a.id), a]));
     const [likesS, tasteS] = await Promise.all([
@@ -1140,8 +1167,11 @@ app.get("/api/for-you", async (req, res) => {
     const likedIds = new Set(likesS.docs.map((d) => String(d.data().artistId)));
     const plays = new Map();
     tasteS.docs.forEach((d) => plays.set(String(d.data().artistId), Number(d.data().plays || 0)));
-    if (!likedIds.size && !plays.size)
-      return res.json({ ok: true, artists: [], cold: true, source: "taste" });
+    if (!likedIds.size && !plays.size) {
+      const cold = { ok: true, artists: [], cold: true, source: "taste" };
+      forYouCache.set(uid, { at: Date.now(), data: cold });
+      return res.json(cold);
+    }
 
     const score = new Map();
     const reason = new Map();
@@ -1172,7 +1202,9 @@ app.get("/api/for-you", async (req, res) => {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20)
       .map(([id, pts]) => ({ ...byId.get(String(id)), score: Math.round(pts * 10) / 10, reason: reason.get(String(id)) }));
-    res.json({ ok: true, artists: ranked, cold: false, source: lastfmKey() ? "taste+lastfm" : "taste" });
+    const payload = { ok: true, artists: ranked, cold: false, source: lastfmKey() ? "taste+lastfm" : "taste" };
+    forYouCache.set(uid, { at: Date.now(), data: payload });
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

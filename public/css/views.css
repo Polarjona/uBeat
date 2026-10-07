@@ -542,6 +542,10 @@
 .todos-scroll { margin-top: 34px; }
 .todos-scroll h2 { font-size: 19px; font-weight: 700; margin: 0 0 4px; }
 .todos-scroll .muted { display: block; margin-bottom: 16px; }
+.todos-scroll .chart-row { content-visibility: auto; contain-intrinsic-size: auto 70px; }
+.todos-more { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 24px; }
+.todos-more .btn { min-height: 44px; padding: 0 26px; font-size: 14.5px; }
+.todos-more .muted { text-align: center; font-size: 12.5px; margin-bottom: 0; }
 
 /* ---------- Discos sociales (SocialRail) ---------- */
 .rail-track {
@@ -1950,14 +1954,16 @@
 
   .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
   .rail-item { width: 150px; }
-  .card-cta { transform: none; opacity: 1; width: 38px; height: 38px; }
+  .card-cta { transform: none; opacity: 1; width: 44px; height: 44px; }
 
   .catalog-head { flex-wrap: wrap; gap: 10px; margin-top: 26px; }
   .chart-row { gap: 11px; padding: 8px 12px 8px 9px; }
   .chart-pos { width: 24px; font-size: 13px; }
   .chart-row img { width: 44px; height: 44px; border-radius: 9px; }
   .chart-body strong { font-size: 14px; }
-  .chart-cta { width: 34px; height: 34px; transform: scale(1); opacity: 1; }
+  .chart-cta { width: 40px; height: 40px; transform: scale(1); opacity: 1; }
+  .heart { width: 44px; height: 44px; }
+  .heart.sm { width: 38px; height: 38px; }
   .chart-row:hover { transform: none; }
 
   .detail-panel {
@@ -1980,12 +1986,12 @@
   .plan-compare { grid-template-columns: 1fr; }
   .plan-box { padding: 17px; }
 
-  .chat-wrap { right: 14px; left: 14px; bottom: 16px; }
-  .chat-wrap.raised { bottom: 100px; }
+  .chat-wrap { right: 14px; left: 14px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .chat-wrap.raised { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
   .chat-panel { width: auto; max-height: min(70vh, 520px); align-self: stretch; }
 
   .detail-img { height: 240px; }
-  .detail-body { padding: 0 18px 90px; }
+  .detail-body { padding: 0 18px calc(90px + env(safe-area-inset-bottom, 0px)); }
   .detail-body h2 { font-size: 24px; }
 
   .track-list .row-play { padding: 8px 6px; gap: 9px; }
