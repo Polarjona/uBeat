@@ -3,169 +3,599 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Administración · Artistas App</title>
+<title>Panel de administración · uBeat</title>
+<link rel="icon" href="/favicon.svg?v=1" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap" rel="stylesheet" />
 <style>
-  :root { --bg:#0d0d10; --panel:#17171c; --panel2:#1e1e25; --line:#2a2a33; --text:#f2f2f5; --muted:#9b9ba7; --accent:#8b5cf6; --ok:#22c55e; --danger:#ef4444; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-  h1 { font-size:20px; margin:0; }
-  h2 { font-size:15px; margin:0 0 12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
-  .wrap { max-width:1000px; margin:0 auto; padding:24px 16px 64px; }
-  .top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; }
-  .badge { background:var(--accent); color:#fff; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
-  .kpis { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
-  .kpi { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px; }
-  .kpi b { display:block; font-size:24px; }
-  .kpi span { color:var(--muted); font-size:12px; }
-  input,button,select { font:inherit; }
-  input[type=text],input[type=password],input[type=search] { background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 12px; width:100%; }
-  select { background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 12px; }
-  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; font-weight:600; }
-  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
-  button.sm { padding:5px 9px; font-size:12px; }
-  button.danger { background:var(--danger); }
-  button.ok { background:var(--ok); }
-  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  table { width:100%; border-collapse:collapse; }
-  th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); font-size:13px; }
-  th { color:var(--muted); font-weight:600; }
-  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
-  .pill.pro { background:#22c55e33; color:#4ade80; }
-  .pill.free { background:#ffffff14; color:var(--muted); }
-  .tabs { display:flex; gap:6px; margin-bottom:16px; }
-  .tabs button { background:var(--panel2); color:var(--muted); }
-  .tabs button.active { background:var(--accent); color:#fff; }
-  .muted { color:var(--muted); }
-  #loginView { max-width:360px; margin:12vh auto; }
-  #appView { display:none; }
-  .err { color:#f87171; font-size:13px; min-height:18px; }
-  .bar { height:8px; background:var(--accent); border-radius:99px; }
+  :root {
+    --bg: #0a0c12;
+    --bg-soft: #0e1018;
+    --panel: #141722;
+    --panel2: #1a1e2c;
+    --line: #262b3d;
+    --line-soft: #1f2436;
+    --text: #eef0f6;
+    --muted: #9aa1b9;
+    --accent: #7c6cf0;
+    --accent2: #35d0e8;
+    --grad: linear-gradient(135deg, #7c6cf0, #35d0e8);
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+    --sidebar: 236px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  h1, h2, h3 { font-family: Sora, Inter, sans-serif; margin: 0; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 15px; }
+  a { color: var(--accent2); text-decoration: none; }
+  button, input, select, textarea { font: inherit; }
+  .muted { color: var(--muted); }
+  .err { color: #f87171; font-size: 13px; min-height: 18px; margin-top: 8px; }
+  .ok-note { color: #4ade80; font-size: 13px; }
+
+  /* ---------- Botones e inputs ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--accent); color: #fff; border: 0; border-radius: 10px;
+    padding: 9px 14px; cursor: pointer; font-weight: 600; transition: .15s;
+    white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  .btn.ghost:hover { border-color: var(--accent); }
+  .btn.ok { background: var(--ok); }
+  .btn.danger { background: var(--danger); }
+  .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+  .btn.grad { background: var(--grad); }
+  input[type=text], input[type=password], input[type=email], input[type=search], select, textarea {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 9px 12px; width: 100%; outline: none;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { min-height: 74px; resize: vertical; }
+  label.fld { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; font-weight: 600; letter-spacing: .02em; }
+
+  /* ---------- Login ---------- */
+  #loginView {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(900px 500px at 15% -10%, rgba(124,108,240,.22), transparent 60%),
+      radial-gradient(700px 500px at 110% 110%, rgba(53,208,232,.14), transparent 60%),
+      var(--bg);
+    padding: 24px;
+  }
+  .login-card { width: 100%; max-width: 400px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 28px; box-shadow: var(--shadow); }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .brand .logo {
+    width: 38px; height: 38px; border-radius: 12px; background: var(--grad);
+    display: grid; place-items: center; font-weight: 800; color: #fff; font-family: Sora, sans-serif;
+  }
+  .brand h1 { font-size: 18px; }
+  .brand .tag { font-size: 11px; color: var(--muted); }
+  .login-card .sub { color: var(--muted); font-size: 13px; margin: 10px 0 18px; }
+  .login-card .btn { width: 100%; margin-top: 14px; padding: 11px; }
+  .login-hint { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); font-size: 12px; color: var(--muted); }
+
+  /* ---------- Estructura del panel ---------- */
+  #appView { display: none; }
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: var(--sidebar); background: var(--bg-soft); border-right: 1px solid var(--line-soft);
+    position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; z-index: 40;
+  }
+  .sidebar .brand { padding: 20px 18px 14px; border-bottom: 1px solid var(--line-soft); margin: 0; }
+  .nav { padding: 14px 10px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .nav button {
+    display: flex; align-items: center; gap: 10px; background: transparent; border: 0;
+    color: var(--muted); text-align: left; padding: 10px 12px; border-radius: 10px;
+    cursor: pointer; font-weight: 600; font-size: 13.5px;
+  }
+  .nav button svg { width: 17px; height: 17px; flex: none; }
+  .nav button:hover { background: var(--panel); color: var(--text); }
+  .nav button.active { background: linear-gradient(135deg, rgba(124,108,240,.22), rgba(53,208,232,.12)); color: #fff; box-shadow: inset 0 0 0 1px rgba(124,108,240,.4); }
+  .nav .sec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: #5b6180; padding: 14px 12px 6px; }
+  .side-foot { padding: 12px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 8px; }
+  .side-foot .btn { width: 100%; }
+
+  .main { flex: 1; margin-left: var(--sidebar); min-width: 0; }
+  .topbar {
+    position: sticky; top: 0; z-index: 30; background: rgba(10,12,18,.86);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--line-soft);
+    display: flex; align-items: center; gap: 14px; padding: 14px 24px;
+  }
+  .topbar .grow { flex: 1; min-width: 0; }
+  .topbar .who { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .topbar .who .av { width: 28px; height: 28px; border-radius: 50%; background: var(--grad); display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 13px; }
+  .menu-btn { display: none; }
+  .content { padding: 24px; max-width: 1280px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---------- Tarjetas / KPIs ---------- */
+  .card {
+    background: var(--panel); border: 1px solid var(--line-soft); border-radius: 16px;
+    padding: 18px; margin-bottom: 18px;
+  }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .card-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px 16px; position: relative; overflow: hidden; }
+  .kpi::after { content: ""; position: absolute; right: -26px; top: -26px; width: 74px; height: 74px; border-radius: 50%; background: rgba(124,108,240,.12); }
+  .kpi b { display: block; font-size: 25px; font-family: Sora, sans-serif; line-height: 1.15; }
+  .kpi span { color: var(--muted); font-size: 12px; }
+  .kpi.acc b { color: var(--accent2); }
+
+  .grid2 { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; }
+  .grid2b { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .chart-box { position: relative; height: 260px; }
+  .chart-box.tall { height: 300px; }
+
+  /* ---------- Tablas ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line-soft); font-size: 13px; vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+  tbody tr:hover { background: rgba(124,108,240,.05); }
+  .u-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .u-av { width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 13px; color: #fff; background: #3b3f57; }
+  .u-cell .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .u-cell .em { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+  .pill.pro { background: rgba(34,197,94,.15); color: #4ade80; }
+  .pill.free { background: rgba(255,255,255,.07); color: var(--muted); }
+  .pill.admin { background: rgba(124,108,240,.18); color: #a99cff; }
+  .pill.user { background: rgba(53,208,232,.12); color: #67e3f5; }
+  .pill.open { background: rgba(245,158,11,.15); color: #fbbf24; }
+  .pill.resolved { background: rgba(34,197,94,.15); color: #4ade80; }
+  .pill.feed { background: rgba(53,208,232,.14); color: #67e3f5; }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .row-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .row-tools input[type=search] { max-width: 320px; }
+  .row-tools select { width: auto; }
+  .pager { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .empty { text-align: center; color: var(--muted); padding: 26px 8px; }
+
+  /* ---------- Feeds ---------- */
+  .feed-layout { display: grid; grid-template-columns: 300px 1fr; gap: 18px; align-items: start; }
+  .feed-list { max-height: 640px; overflow: auto; }
+  .feed-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .feed-item:hover { background: var(--panel2); }
+  .feed-item.sel { background: linear-gradient(135deg, rgba(124,108,240,.18), rgba(53,208,232,.08)); border-color: rgba(124,108,240,.45); }
+  .feed-item .meta { min-width: 0; }
+  .feed-item .meta .nm { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed-item .meta .em { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; background: var(--panel2);
+    border: 1px solid var(--line); color: var(--text); border-radius: 999px;
+    padding: 5px 11px; font-size: 12.5px; cursor: pointer; user-select: none;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip.on { background: rgba(124,108,240,.2); border-color: var(--accent); color: #cfc7ff; font-weight: 600; }
+  .chip.x::after { content: "\00d7"; color: var(--muted); font-weight: 700; }
+  .chip.x:hover::after { color: var(--danger); }
+  .artist-results { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; max-height: 170px; overflow: auto; }
+  .artist-results button {
+    text-align: left; background: var(--panel2); border: 1px solid var(--line-soft); color: var(--text);
+    border-radius: 8px; padding: 7px 10px; cursor: pointer; font-size: 12.5px;
+  }
+  .artist-results button:hover { border-color: var(--accent); }
+  .sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; margin-top: 6px; }
+  .slider label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+  .slider label b { color: var(--accent2); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .switch input { display: none; }
+  .switch .track { width: 40px; height: 22px; border-radius: 99px; background: #333a52; position: relative; transition: .18s; }
+  .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .18s; }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(18px); }
+  .feed-user-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    background: var(--panel2); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px 14px; margin-bottom: 6px;
+  }
+  .feed-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+
+  /* ---------- Modal ---------- */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(5,6,10,.72); backdrop-filter: blur(3px);
+    display: none; align-items: center; justify-content: center; z-index: 90; padding: 18px;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    width: 100%; max-width: 520px; max-height: 88vh; overflow: auto; padding: 22px; box-shadow: var(--shadow);
+  }
+  .modal.wide { max-width: 720px; }
+  .modal h3 { font-size: 16px; margin-bottom: 4px; }
+  .modal .close { float: right; background: transparent; border: 0; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  .detail-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 14px; }
+  .detail-kpis .kpi { padding: 10px 12px; }
+  .detail-kpis .kpi b { font-size: 19px; }
+  .recent-item { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+  .recent-item:last-child { border-bottom: 0; }
+  .recent-item .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+  .recent-item .t { color: var(--muted); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
+  .toast {
+    position: fixed; bottom: 22px; right: 22px; background: var(--panel2); border: 1px solid var(--accent);
+    color: var(--text); padding: 12px 16px; border-radius: 12px; box-shadow: var(--shadow);
+    z-index: 120; display: none; font-size: 13.5px; max-width: 340px;
+  }
+  .toast.show { display: block; animation: pop .2s ease; }
+  .toast.bad { border-color: var(--danger); }
+  @keyframes pop { from { transform: translateY(8px); opacity: 0; } }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1080px) {
+    .grid2, .grid2b { grid-template-columns: 1fr; }
+    .feed-layout { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 860px) {
+    .sidebar { transform: translateX(-100%); transition: .2s; }
+    .sidebar.open { transform: none; box-shadow: var(--shadow); }
+    .main { margin-left: 0; }
+    .menu-btn { display: inline-flex; }
+    .content { padding: 16px; }
+    .topbar { padding: 12px 16px; }
+    .sliders { grid-template-columns: 1fr; }
+    th.hide-s, td.hide-s { display: none; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <div id="loginView">
-    <div class="card">
-      <div class="top"><h1>Panel de administración</h1><span class="badge">ADMIN</span></div>
-      <label class="muted">Usuario</label>
-      <input type="text" id="lgUser" autocomplete="username" />
-      <label class="muted" style="display:block;margin-top:10px">Contraseña</label>
-      <input type="password" id="lgPass" autocomplete="current-password" />
-      <div class="err" id="lgErr"></div>
-      <button id="lgBtn" style="width:100%">Entrar</button>
+<!-- ======================= LOGIN ======================= -->
+<div id="loginView">
+  <div class="login-card">
+    <div class="brand">
+      <div class="logo">u</div>
+      <div>
+        <h1>uBeat · Administración</h1>
+        <div class="tag">Panel interno de la plataforma</div>
+      </div>
     </div>
+    <p class="sub">Accede con la cuenta maestra o con una cuenta con rol de administrador de la app.</p>
+    <label class="fld">Usuario o email</label>
+    <input type="text" id="lgUser" autocomplete="username" placeholder="admin o admin@ejemplo.com" />
+    <label class="fld">Contraseña</label>
+    <input type="password" id="lgPass" autocomplete="current-password" placeholder="••••••••" />
+    <div class="err" id="lgErr"></div>
+    <button class="btn grad" id="lgBtn">Entrar al panel</button>
+    <div class="login-hint" id="lgHint">Si iniciaste sesión en la app uBeat con una cuenta administradora, entrarás automáticamente.</div>
   </div>
+</div>
 
-  <div id="appView">
-    <div class="top">
-      <h1>Administración <span class="badge">ADMIN</span></h1>
-      <div class="row">
-        <button class="ghost sm" id="refreshBtn">Actualizar</button>
-        <button class="ghost sm" id="logoutBtn">Salir</button>
-      </div>
-    </div>
-
-    <div class="tabs">
-      <button class="active" data-tab="stats">Estadísticas</button>
-      <button data-tab="users">Usuarios</button>
-      <button data-tab="support">Soporte</button>
-    </div>
-
-    <div id="tabStats">
-      <div class="card">
-        <h2>Estadísticas generales</h2>
-        <div class="kpis" id="kpis"></div>
-      </div>
-      <div class="card">
-        <h2>Artistas más gustados</h2>
-        <table><thead><tr><th>#</th><th>Artista</th><th>Likes</th></tr></thead><tbody id="topLikes"></tbody></table>
-      </div>
-    </div>
-
-    <div id="tabUsers" style="display:none">
-      <div class="card">
-        <h2>Usuarios</h2>
-        <div class="row" style="margin-bottom:12px">
-          <input type="search" id="userSearch" placeholder="Buscar por nombre, email o uid…" style="flex:1;min-width:220px" />
-          <button id="userSearchBtn">Buscar</button>
-        </div>
-        <div class="muted" id="userCount"></div>
-        <table>
-          <thead><tr><th>Nombre</th><th>Email</th><th>Plan</th><th>Creado</th><th></th></tr></thead>
-          <tbody id="userRows"></tbody>
-        </table>
-        <div class="row" style="margin-top:12px">
-          <button class="ghost sm" id="prevBtn">← Anterior</button>
-          <span class="muted" id="pageInfo"></span>
-          <button class="ghost sm" id="nextBtn">Siguiente →</button>
+<!-- ======================= APP ======================= -->
+<div id="appView">
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="logo">u</div>
+        <div>
+          <h1 style="font-size:15px">uBeat Admin</h1>
+          <div class="tag">Panel de administración</div>
         </div>
       </div>
-    </div>
-    <div id="tabSupport" style="display:none">
-      <div class="card">
-        <h2>Tiquets de soporte</h2>
-        <div class="row" style="margin-bottom:12px">
-          <select id="tkStatus">
-            <option value="">Todos</option>
-            <option value="open">Abiertos</option>
-            <option value="resolved">Resueltos</option>
-          </select>
-          <input type="search" id="tkSearch" placeholder="Buscar asunto, mensaje o autor…" style="flex:1;min-width:220px" />
-          <button id="tkSearchBtn">Buscar</button>
+      <nav class="nav">
+        <div class="sec">General</div>
+        <button class="active" data-nav="resumen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          Resumen
+        </button>
+        <button data-nav="usuarios">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Usuarios
+        </button>
+        <div class="sec">Algoritmo</div>
+        <button data-nav="feeds">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2.5"/></svg>
+          Feeds y recomendaciones
+        </button>
+        <div class="sec">Operación</div>
+        <button data-nav="soporte">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          Soporte <span id="navTk" class="pill open" style="display:none">0</span>
+        </button>
+      </nav>
+      <div class="side-foot">
+        <a class="btn ghost" href="/" id="toAppBtn">Ir a la app uBeat</a>
+        <button class="btn ghost" id="logoutBtn">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="btn ghost sm menu-btn" id="menuBtn" aria-label="Menú">☰</button>
+        <div class="grow">
+          <h1 id="pageTitle">Resumen</h1>
+          <div class="muted" id="pageSub" style="font-size:12.5px">Visión general de la plataforma</div>
         </div>
-        <div class="muted" id="tkCount"></div>
-        <table>
-          <thead><tr><th>Asunto</th><th>Mensaje</th><th>De</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
-          <tbody id="tkRows"></tbody>
-        </table>
-        <div class="row" style="margin-top:12px">
-          <button class="ghost sm" id="tkPrevBtn">← Anterior</button>
-          <span class="muted" id="tkPageInfo"></span>
-          <button class="ghost sm" id="tkNextBtn">Siguiente →</button>
-        </div>
+        <button class="btn ghost sm" id="refreshBtn">Actualizar</button>
+        <div class="who"><span class="av" id="whoAv">A</span><span id="whoName">admin</span></div>
+      </header>
+
+      <div class="content">
+
+        <!-- ============ RESUMEN ============ -->
+        <section class="view active" id="view-resumen">
+          <div class="kpis" id="kpis"></div>
+
+          <div class="grid2">
+            <div class="card">
+              <div class="card-head"><h2>Altas de usuarios · últimos 30 días</h2></div>
+              <div class="chart-box"><canvas id="chSignups"></canvas></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>Planes de suscripción</h2></div>
+              <div class="chart-box"><canvas id="chPlans"></canvas></div>
+            </div>
+          </div>
+
+          <div class="grid2b">
+            <div class="card">
+              <div class="card-head"><h2>Actividad · 14 días</h2></div>
+              <div class="chart-box"><canvas id="chActivity"></canvas></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>Artistas con más Me gusta</h2></div>
+              <div class="chart-box"><canvas id="chTopLikes"></canvas></div>
+            </div>
+          </div>
+
+          <div class="grid2b">
+            <div class="card">
+              <div class="card-head"><h2>Artistas más escuchados</h2></div>
+              <div class="chart-box"><canvas id="chTopPlays"></canvas></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>Géneros del catálogo</h2></div>
+              <div class="chart-box"><canvas id="chGenres"></canvas></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Últimos Me gusta</h2></div>
+            <div id="recentLikes"><div class="empty">Cargando…</div></div>
+          </div>
+        </section>
+
+        <!-- ============ USUARIOS ============ -->
+        <section class="view" id="view-usuarios">
+          <div class="card">
+            <div class="card-head">
+              <h2>Usuarios de la plataforma</h2>
+              <button class="btn grad sm" id="createUserBtn">Crear usuario</button>
+            </div>
+            <div class="row-tools">
+              <input type="search" id="userSearch" placeholder="Buscar por nombre, email o uid…" />
+              <select id="userFilter">
+                <option value="">Todos</option>
+                <option value="admin">Administradores</option>
+                <option value="pro">Plan PRO</option>
+                <option value="free">Plan gratuito</option>
+                <option value="feed">Con feed</option>
+              </select>
+              <button class="btn sm" id="userSearchBtn">Buscar</button>
+              <span class="muted" id="userCount"></span>
+            </div>
+            <div style="overflow-x:auto">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Plan</th>
+                    <th>Rol</th>
+                    <th class="hide-s">Feed</th>
+                    <th class="hide-s">Creado</th>
+                    <th style="text-align:right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="userRows"></tbody>
+              </table>
+            </div>
+            <div class="pager">
+              <button class="btn ghost sm" id="prevBtn">← Anterior</button>
+              <span class="muted" id="pageInfo"></span>
+              <button class="btn ghost sm" id="nextBtn">Siguiente →</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ FEEDS ============ -->
+        <section class="view" id="view-feeds">
+          <div class="feed-layout">
+            <div class="card" style="margin-bottom:0">
+              <div class="card-head"><h2>Perfiles</h2></div>
+              <input type="search" id="feedSearch" placeholder="Buscar usuario…" />
+              <div class="feed-list" id="feedUserList" style="margin-top:10px"></div>
+            </div>
+
+            <div class="card" style="margin-bottom:0">
+              <div class="card-head">
+                <h2>Editor de feed</h2>
+                <label class="switch"><input type="checkbox" id="feedEnabled" checked /><span class="track"></span>Feed activo</label>
+              </div>
+
+              <div id="feedEmpty" class="empty">Selecciona un perfil a la izquierda para crear o editar su feed.</div>
+
+              <div id="feedForm" style="display:none">
+                <div class="feed-user-head">
+                  <div>
+                    <strong id="feedUName">—</strong>
+                    <div class="muted" id="feedUEmail" style="font-size:12.5px">—</div>
+                  </div>
+                  <div class="chips" id="feedUBadges"></div>
+                </div>
+
+                <label class="fld">Géneros preferidos</label>
+                <div class="chips" id="feedGenres"></div>
+
+                <label class="fld">Artistas semilla (favoritos del perfil)</label>
+                <div class="chips" id="feedArtists"></div>
+                <input type="search" id="feedArtistSearch" placeholder="Busca un artista del catálogo…" style="margin-top:8px" />
+                <div class="artist-results" id="feedArtistResults"></div>
+
+                <label class="fld">Pesos del algoritmo</label>
+                <div class="sliders">
+                  <div class="slider">
+                    <label>Favoritos y escuchas <b id="vFavorites">40%</b></label>
+                    <input type="range" min="0" max="100" value="40" id="wFavorites" />
+                  </div>
+                  <div class="slider">
+                    <label>Descubrimiento <b id="vDiscovery">30%</b></label>
+                    <input type="range" min="0" max="100" value="30" id="wDiscovery" />
+                  </div>
+                  <div class="slider">
+                    <label>Tendencia <b id="vTrending">20%</b></label>
+                    <input type="range" min="0" max="100" value="20" id="wTrending" />
+                  </div>
+                  <div class="slider">
+                    <label>Actividad de amigos <b id="vFriends">10%</b></label>
+                    <input type="range" min="0" max="100" value="10" id="wFriends" />
+                  </div>
+                </div>
+
+                <label class="fld">Notas internas</label>
+                <textarea id="feedNotes" placeholder="Ej.: perfil de demostración, prioriza rock alternativo…"></textarea>
+
+                <div class="feed-actions">
+                  <button class="btn grad" id="feedSave">Guardar feed</button>
+                  <button class="btn ghost" id="feedReset">Restablecer (quitar feed)</button>
+                  <span class="ok-note" id="feedNote"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:18px">
+            <div class="card-head"><h2>Feeds configurados</h2></div>
+            <div style="overflow-x:auto">
+              <table>
+                <thead>
+                  <tr><th>Perfil</th><th>Plan</th><th>Géneros</th><th class="hide-s">Semillas</th><th class="hide-s">Pesos</th><th class="hide-s">Actualizado</th><th></th></tr>
+                </thead>
+                <tbody id="feedRows"><tr><td colspan="7" class="empty">Cargando…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ SOPORTE ============ -->
+        <section class="view" id="view-soporte">
+          <div class="card">
+            <div class="card-head"><h2>Tiquetes de soporte</h2></div>
+            <div class="row-tools">
+              <select id="tkStatus">
+                <option value="">Todos</option>
+                <option value="open">Abiertos</option>
+                <option value="resolved">Resueltos</option>
+              </select>
+              <input type="search" id="tkSearch" placeholder="Buscar asunto, mensaje o autor…" />
+              <button class="btn sm" id="tkSearchBtn">Buscar</button>
+              <span class="muted" id="tkCount"></span>
+            </div>
+            <div style="overflow-x:auto">
+              <table>
+                <thead>
+                  <tr><th>Asunto</th><th class="hide-s">Mensaje</th><th>De</th><th class="hide-s">Fecha</th><th>Estado</th><th style="text-align:right">Acciones</th></tr>
+                </thead>
+                <tbody id="tkRows"></tbody>
+              </table>
+            </div>
+            <div class="pager">
+              <button class="btn ghost sm" id="tkPrevBtn">← Anterior</button>
+              <span class="muted" id="tkPageInfo"></span>
+              <button class="btn ghost sm" id="tkNextBtn">Siguiente →</button>
+            </div>
+          </div>
+        </section>
+
       </div>
     </div>
   </div>
 </div>
 
+<!-- ======================= MODALES ======================= -->
+<div class="modal-bg" id="modalUser">
+  <div class="modal">
+    <button class="close" data-close="modalUser">×</button>
+    <h3>Crear usuario</h3>
+    <p class="muted" style="font-size:13px;margin-top:4px">Se crea la cuenta en Firebase Authentication y queda lista para usar en la app.</p>
+    <label class="fld">Nombre</label>
+    <input type="text" id="cuName" placeholder="Ana Torres" />
+    <label class="fld">Email</label>
+    <input type="email" id="cuEmail" placeholder="ana@ejemplo.com" />
+    <label class="fld">Contraseña</label>
+    <input type="password" id="cuPass" placeholder="Mínimo 6 caracteres" />
+    <label class="switch" style="margin-top:14px"><input type="checkbox" id="cuAdmin" /><span class="track"></span>Hacer administrador</label>
+    <div class="err" id="cuErr"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close="modalUser">Cancelar</button>
+      <button class="btn grad" id="cuSave">Crear usuario</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalDetail">
+  <div class="modal wide">
+    <button class="close" data-close="modalDetail">×</button>
+    <h3 id="dtName">Detalle de usuario</h3>
+    <p class="muted" id="dtEmail" style="font-size:13px;margin-top:4px"></p>
+    <div class="chips" id="dtBadges" style="margin-top:8px"></div>
+    <div class="detail-kpis" id="dtKpis"></div>
+    <div id="dtFeed" style="margin-top:16px"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="dtFeedBtn">Editar feed</button>
+      <button class="btn ghost" id="dtClose">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalTicket">
+  <div class="modal">
+    <button class="close" data-close="modalTicket">×</button>
+    <h3 id="tkdSubject">Tiquet</h3>
+    <p class="muted" id="tkdMeta" style="font-size:12.5px;margin-top:4px"></p>
+    <div style="background:var(--panel2);border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin-top:12px;white-space:pre-wrap;overflow-wrap:anywhere" id="tkdBody"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" data-close="modalTicket">Cerrar</button>
+      <button class="btn ok" id="tkdToggle">Marcar resuelto</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="/js/firebase-init.js?v=21"></script>
 <script>
 (function () {
+  "use strict";
+
   var token = localStorage.getItem("adminToken") || "";
-  var offset = 0, limit = 20, search = "";
+  var whoName = sessionStorage.getItem("adminWho") || "admin";
+  var offset = 0, limit = 20, search = "", filter = "";
   var tkOffset = 0, tkLimit = 20, tkSearch = "", tkStatus = "";
+  var charts = {};
 
   var $ = function (id) { return document.getElementById(id); };
-
-  function api(method, url, body) {
-    return fetch(url, {
-      method: method,
-      headers: { "Content-Type": "application/json", "x-admin-token": token },
-      body: body ? JSON.stringify(body) : undefined
-    }).then(function (r) {
-      if (r.status === 401 && url.indexOf("/login") === -1) { showLogin(); throw new Error("Sesión caducada."); }
-      return r.json().then(function (j) {
-        if (!r.ok || j.ok === false) throw new Error(j.error || "Error " + r.status);
-        return j;
-      });
-    });
-  }
-
-  function showLogin() {
-    token = "";
-    localStorage.removeItem("adminToken");
-    $("appView").style.display = "none";
-    $("loginView").style.display = "block";
-  }
-
-  function showApp() {
-    $("loginView").style.display = "none";
-    $("appView").style.display = "block";
-    loadStats();
-    loadUsers();
-    loadTickets();
-  }
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
@@ -173,56 +603,631 @@
     });
   }
 
-  function loadStats() {
-    api("GET", "/api/admin/stats").then(function (j) {
-      var s = j.stats;
+  function toast(msg, bad) {
+    var t = $("toast");
+    t.textContent = msg;
+    t.className = "toast show" + (bad ? " bad" : "");
+    clearTimeout(t._h);
+    t._h = setTimeout(function () { t.className = "toast"; }, 3200);
+  }
+
+  function api(method, url, body) {
+    return fetch(url, {
+      method: method,
+      headers: { "Content-Type": "application/json", "x-admin-token": token },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      if (r.status === 401 && url.indexOf("/login") === -1 && url.indexOf("/session") === -1) {
+        showLogin();
+        throw new Error("Sesión caducada.");
+      }
+      return r.json().then(function (j) {
+        if (!r.ok || j.ok === false) throw new Error(j.error || "Error " + r.status);
+        return j;
+      });
+    });
+  }
+
+  // ---------- Sesión ----------
+  function showLogin() {
+    token = "";
+    localStorage.removeItem("adminToken");
+    $("appView").style.display = "none";
+    $("loginView").style.display = "flex";
+  }
+
+  function showApp() {
+    $("loginView").style.display = "none";
+    $("appView").style.display = "block";
+    $("whoName").textContent = whoName;
+    $("whoAv").textContent = (whoName || "a").charAt(0).toUpperCase();
+    loadAll();
+  }
+
+  function sessionFromApp() {
+    return new Promise(function (resolve) {
+      if (!window.firebase || !window.firebase.auth) return resolve(false);
+      var done = false;
+      var to = setTimeout(function () { if (!done) { done = true; resolve(false); } }, 7000);
+      try {
+        firebase.auth().onAuthStateChanged(function (u) {
+          if (done) return;
+          done = true;
+          clearTimeout(to);
+          if (!u) return resolve(false);
+          u.getIdToken().then(function (idToken) {
+            return fetch("/api/admin/session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ idToken: idToken })
+            }).then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }); });
+          }).then(function (o) {
+            if (o.r.ok && o.j.token) {
+              token = o.j.token;
+              whoName = o.j.name || (u.displayName || u.email || "admin");
+              sessionStorage.setItem("adminWho", whoName);
+              localStorage.setItem("adminToken", token);
+              resolve(true);
+            } else resolve(false);
+          }).catch(function () { resolve(false); });
+        });
+      } catch (_) { resolve(false); }
+    });
+  }
+
+  function doLogin() {
+    $("lgErr").textContent = "";
+    fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: $("lgUser").value.trim(), password: $("lgPass").value })
+    }).then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }); })
+      .then(function (o) {
+        if (!o.r.ok || !o.j.token) throw new Error(o.j.error || "Error de acceso.");
+        token = o.j.token;
+        whoName = o.j.name || $("lgUser").value.trim();
+        sessionStorage.setItem("adminWho", whoName);
+        localStorage.setItem("adminToken", token);
+        showApp();
+      })
+      .catch(function (e) { $("lgErr").textContent = e.message; });
+  }
+
+  // ---------- Navegación ----------
+  var TITLES = {
+    resumen: ["Resumen", "Visión general de la plataforma"],
+    usuarios: ["Usuarios", "Cuentas, planes y permisos de administración"],
+    feeds: ["Feeds y recomendaciones", "Configura el algoritmo de cada perfil"],
+    soporte: ["Soporte", "Tiquetes enviados por los usuarios"]
+  };
+
+  function navigate(view) {
+    document.querySelectorAll(".nav button[data-nav]").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.nav === view);
+    });
+    document.querySelectorAll(".view").forEach(function (v) {
+      v.classList.toggle("active", v.id === "view-" + view);
+    });
+    var t = TITLES[view] || TITLES.resumen;
+    $("pageTitle").textContent = t[0];
+    $("pageSub").textContent = t[1];
+    $("sidebar").classList.remove("open");
+    if (location.hash.slice(1) !== view) location.hash = view;
+    if (view === "resumen") loadAnalytics();
+    if (view === "usuarios") loadUsers();
+    if (view === "feeds") loadFeedsView();
+    if (view === "soporte") loadTickets();
+  }
+
+  function loadAll() {
+    var startView = (location.hash || "").slice(1);
+    if (!(startView in TITLES)) startView = "resumen";
+    navigate(startView);
+    loadOpenTicketsBadge();
+  }
+
+  // ---------- Gráficos ----------
+  Chart.defaults.color = "#9aa1b9";
+  Chart.defaults.borderColor = "rgba(255,255,255,.06)";
+  Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+
+  function mkChart(id, cfg) {
+    var el = $(id);
+    if (!el) return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(el.getContext("2d"), cfg);
+  }
+
+  function shortDay(d) { return String(d).slice(5); }
+
+  function lineOpts() {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } }
+      }
+    };
+  }
+
+  function loadAnalytics() {
+    api("GET", "/api/admin/analytics").then(function (j) {
+      var k = j.kpis || {};
       var kpis = [
-        ["Usuarios", s.users],
-        ["Artistas", s.artists],
-        ["Likes", s.likes],
-        ["Escuchas (song_likes)", s.songLikes],
-        ["Puntuaciones", s.ratings],
-        ["Playlists", s.playlists],
-        ["Amistades", s.friendships],
-        ["Suscripciones", s.subscriptions],
-        ["Plan PRO", s.plans.pro],
-        ["Plan gratuito", s.plans.free],
-        ["Tiquetes", s.tickets == null ? 0 : s.tickets],
-        ["Tiquetes abiertos", s.ticketsOpen == null ? 0 : s.ticketsOpen]
+        ["Usuarios", k.users], ["Administradores", k.admins], ["Plan PRO", k.pro],
+        ["Artistas", k.artists], ["Me gusta", k.likes], ["Escuchas", k.plays],
+        ["Tiquetes abiertos", k.ticketsOpen], ["Feeds activos", k.feeds]
       ];
-      $("kpis").innerHTML = kpis.map(function (k) {
-        return '<div class="kpi"><b>' + esc(k[1]) + "</b><span>" + esc(k[0]) + "</span></div>";
+      $("kpis").innerHTML = kpis.map(function (x, i) {
+        return '<div class="kpi' + (i === 1 || i === 7 ? " acc" : "") + '"><b>' +
+          esc(x[1] == null ? 0 : x[1]) + "</b><span>" + esc(x[0]) + "</span></div>";
       }).join("");
-      $("topLikes").innerHTML = (s.topLikes || []).length
-        ? s.topLikes.map(function (t, i) {
-            return "<tr><td>" + (i + 1) + "</td><td>" + esc(t.name) + "</td><td>" + esc(t.likes) + "</td></tr>";
+
+      var s = j.series || {};
+      mkChart("chSignups", {
+        type: "line",
+        data: {
+          labels: (s.signups || []).map(function (d) { return shortDay(d.day); }),
+          datasets: [{
+            data: (s.signups || []).map(function (d) { return d.value; }),
+            borderColor: "#7c6cf0", backgroundColor: "rgba(124,108,240,.15)",
+            fill: true, tension: .35, pointRadius: 2, borderWidth: 2
+          }]
+        },
+        options: lineOpts()
+      });
+
+      mkChart("chActivity", {
+        type: "line",
+        data: {
+          labels: (s.likes14 || []).map(function (d) { return shortDay(d.day); }),
+          datasets: [
+            { label: "Me gusta", data: (s.likes14 || []).map(function (d) { return d.value; }),
+              borderColor: "#7c6cf0", backgroundColor: "rgba(124,108,240,.12)", fill: true, tension: .35, pointRadius: 2, borderWidth: 2 },
+            { label: "Canciones", data: (s.songLikes14 || []).map(function (d) { return d.value; }),
+              borderColor: "#35d0e8", backgroundColor: "rgba(53,208,232,.10)", fill: true, tension: .35, pointRadius: 2, borderWidth: 2 }
+          ]
+        },
+        options: Object.assign(lineOpts(), { plugins: { legend: { display: true, labels: { boxWidth: 12 } } } })
+      });
+
+      mkChart("chPlans", {
+        type: "doughnut",
+        data: {
+          labels: ["Plan PRO", "Gratuito"],
+          datasets: [{ data: [j.plans.pro || 0, j.plans.free || 0],
+            backgroundColor: ["#7c6cf0", "#2a3047"], borderColor: "#141722", borderWidth: 3 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, cutout: "66%",
+          plugins: { legend: { position: "bottom", labels: { boxWidth: 12, padding: 16 } } } }
+      });
+
+      var top = j.topLikes || [];
+      mkChart("chTopLikes", {
+        type: "bar",
+        data: { labels: top.map(function (t) { return t.name; }),
+          datasets: [{ data: top.map(function (t) { return t.value; }), backgroundColor: "#7c6cf0", borderRadius: 6, barThickness: 14 }] },
+        options: Object.assign(lineOpts(), { indexAxis: "y", plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+                    y: { grid: { display: false }, ticks: { font: { size: 10.5 } } } } })
+      });
+
+      var tp = j.topPlays || [];
+      mkChart("chTopPlays", {
+        type: "bar",
+        data: { labels: tp.map(function (t) { return t.name; }),
+          datasets: [{ data: tp.map(function (t) { return t.value; }), backgroundColor: "#35d0e8", borderRadius: 6, barThickness: 14 }] },
+        options: Object.assign(lineOpts(), { indexAxis: "y", plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+                    y: { grid: { display: false }, ticks: { font: { size: 10.5 } } } } })
+      });
+
+      var gd = j.genreDist || [];
+      mkChart("chGenres", {
+        type: "doughnut",
+        data: { labels: gd.map(function (g) { return g.name; }),
+          datasets: [{ data: gd.map(function (g) { return g.value; }),
+            backgroundColor: ["#7c6cf0", "#35d0e8", "#22c55e", "#f59e0b", "#ef4444", "#a78bfa", "#38bdf8", "#64748b"],
+            borderColor: "#141722", borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: "58%",
+          plugins: { legend: { position: "right", labels: { boxWidth: 11, font: { size: 11 } } } } }
+      });
+
+      var rl = j.recentLikes || [];
+      $("recentLikes").innerHTML = rl.length
+        ? rl.map(function (r) {
+            var when = String(r.at || "").replace("T", " ").slice(0, 16);
+            return '<div class="recent-item"><span class="dot"></span><span><strong>' +
+              esc(r.user) + "</strong> le dio Me gusta a <strong>" + esc(r.artist) + "</strong>" +
+              (r.genre ? ' <span class="muted">· ' + esc(r.genre) + "</span>" : "") +
+              '</span><span class="t">' + esc(when) + "</span></div>";
           }).join("")
-        : '<tr><td colspan="3" class="muted">Sin datos.</td></tr>';
-    }).catch(function (e) { $("kpis").innerHTML = '<div class="muted">' + esc(e.message) + "</div>"; });
+        : '<div class="empty">Todavía no hay Me gusta registrados.</div>';
+    }).catch(function (e) {
+      $("kpis").innerHTML = '<div class="muted">' + esc(e.message) + "</div>";
+    });
+  }
+
+  // ---------- Usuarios ----------
+  function avatarColor(uid) {
+    var colors = ["#7c6cf0", "#35d0e8", "#22c55e", "#f59e0b", "#ef4444", "#a78bfa", "#38bdf8", "#f472b6"];
+    var n = 0;
+    String(uid).split("").forEach(function (c) { n = (n + c.charCodeAt(0)) % 997; });
+    return colors[n % colors.length];
+  }
+
+  function userRowHtml(u) {
+    var initials = (u.name || "?").charAt(0).toUpperCase();
+    return "<tr>" +
+      '<td><div class="u-cell"><span class="u-av" style="background:' + avatarColor(u.uid) + '">' + esc(initials) + "</span>" +
+      '<div style="min-width:0"><div class="nm">' + esc(u.name) + '</div><div class="em">' + esc(u.email) + "</div></div></div></td>" +
+      '<td><span class="pill ' + (u.plan === "pro" ? "pro" : "free") + '">' + (u.plan === "pro" ? "PRO" : "Gratis") + "</span></td>" +
+      '<td><span class="pill ' + (u.role === "admin" ? "admin" : "user") + '">' + (u.role === "admin" ? "Admin" : "Usuario") + "</span></td>" +
+      '<td class="hide-s">' + (u.hasFeed ? '<span class="pill feed">Activo</span>' : '<span class="muted">—</span>') + "</td>" +
+      '<td class="hide-s muted">' + esc(String(u.created || "").slice(0, 10)) + "</td>" +
+      '<td><div class="acts">' +
+      '<button class="btn ghost sm" data-act="role" data-uid="' + esc(u.uid) + '" data-role="' + (u.role === "admin" ? "user" : "admin") + '" data-name="' + esc(u.name) + '">' +
+      (u.role === "admin" ? "Quitar admin" : "Hacer admin") + "</button>" +
+      '<button class="btn ghost sm" data-act="plan" data-uid="' + esc(u.uid) + '" data-plan="' + (u.plan === "pro" ? "free" : "pro") + '">' +
+      (u.plan === "pro" ? "Pasar a gratis" : "Hacer PRO") + "</button>" +
+      '<button class="btn ghost sm" data-act="view" data-uid="' + esc(u.uid) + '">Ver</button>' +
+      '<button class="btn danger sm" data-act="del" data-uid="' + esc(u.uid) + '" data-name="' + esc(u.name) + '">Eliminar</button>' +
+      "</div></td></tr>";
   }
 
   function loadUsers() {
-    api("GET", "/api/admin/users?offset=" + offset + "&limit=" + limit + "&search=" + encodeURIComponent(search))
+    api("GET", "/api/admin/users?offset=" + offset + "&limit=" + limit +
+        "&search=" + encodeURIComponent(search) + "&filter=" + encodeURIComponent(filter))
       .then(function (j) {
-        $("userCount").textContent = j.total + " usuario(s)";
+        var rows = j.users || [];
+        if (filter === "admin") rows = rows.filter(function (u) { return u.role === "admin"; });
+        if (filter === "pro") rows = rows.filter(function (u) { return u.plan === "pro"; });
+        if (filter === "free") rows = rows.filter(function (u) { return u.plan === "free"; });
+        if (filter === "feed") rows = rows.filter(function (u) { return u.hasFeed; });
+        $("userCount").textContent = j.total + " cuenta(s)";
         $("pageInfo").textContent = j.total ? (offset + 1) + "–" + Math.min(offset + limit, j.total) + " de " + j.total : "0";
         $("prevBtn").disabled = offset === 0;
         $("nextBtn").disabled = offset + limit >= j.total;
-        $("userRows").innerHTML = j.users.length
-          ? j.users.map(function (u) {
-              return "<tr><td>" + esc(u.name) + "</td><td>" + esc(u.email) +
-                '</td><td><span class="pill ' + (u.plan === "pro" ? "pro" : "free") + '">' +
-                (u.plan === "pro" ? "PRO" : "Gratuito") + "</span></td><td class=\"muted\">" +
-                esc(String(u.created).slice(0, 10)) + "</td><td>" +
-                '<button class="sm ' + (u.plan === "pro" ? "ghost" : "ok") + '" data-uid="' + esc(u.uid) +
-                '" data-plan="' + (u.plan === "pro" ? "free" : "pro") + '">' +
-                (u.plan === "pro" ? "Pasar a gratuito" : "Hacer PRO") + "</button> " +
-                '<button class="sm danger" data-del="' + esc(u.uid) + '" data-name="' + esc(u.name) + '">Eliminar</button>' +
-                "</td></tr>";
-            }).join("")
-          : '<tr><td colspan="5" class="muted">Sin resultados.</td></tr>';
+        $("userRows").innerHTML = rows.length ? rows.map(userRowHtml).join("")
+          : '<tr><td colspan="6" class="empty">Sin resultados.</td></tr>';
       })
-      .catch(function (e) { $("userRows").innerHTML = '<tr><td colspan="5" class="muted">' + esc(e.message) + "</td></tr>"; });
+      .catch(function (e) { $("userRows").innerHTML = '<tr><td colspan="6" class="empty">' + esc(e.message) + "</td></tr>"; });
+  }
+
+  $("userRows").addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    var act = b.dataset.act;
+    if (act === "role") {
+      var toAdmin = b.dataset.role === "admin";
+      var msg = toAdmin
+        ? '¿Hacer administrador a "' + b.dataset.name + '"? Podrá entrar en este panel.'
+        : '¿Quitar los permisos de administrador a "' + b.dataset.name + '"?';
+      if (!confirm(msg)) return;
+      api("POST", "/api/admin/users/" + encodeURIComponent(b.dataset.uid) + "/role", { role: b.dataset.role })
+        .then(function () { toast(toAdmin ? "Ahora es administrador." : "Rol actualizado a usuario."); loadUsers(); loadAnalytics(); })
+        .catch(function (e2) { toast(e2.message, true); });
+    } else if (act === "plan") {
+      if (!confirm("¿Cambiar el plan de este usuario a " + b.dataset.plan + "?")) return;
+      api("POST", "/api/admin/plan", { uid: b.dataset.uid, plan: b.dataset.plan })
+        .then(function () { toast("Plan actualizado."); loadUsers(); loadAnalytics(); })
+        .catch(function (e2) { toast(e2.message, true); });
+    } else if (act === "view") {
+      openDetail(b.dataset.uid);
+    } else if (act === "del") {
+      if (!confirm('¿Eliminar definitivamente a "' + b.dataset.name + '"? Se borran también sus datos.')) return;
+      api("DELETE", "/api/admin/users/" + encodeURIComponent(b.dataset.uid))
+        .then(function () { toast("Usuario eliminado."); loadUsers(); loadAnalytics(); })
+        .catch(function (e2) { toast(e2.message, true); });
+    }
+  });
+
+  // ---- Detalle de usuario ----
+  var detailUid = null;
+  function openDetail(uid) {
+    detailUid = uid;
+    $("dtName").textContent = "Cargando…";
+    $("dtEmail").textContent = "";
+    $("dtBadges").innerHTML = "";
+    $("dtKpis").innerHTML = "";
+    $("dtFeed").innerHTML = "";
+    $("modalDetail").classList.add("open");
+    api("GET", "/api/admin/users/" + encodeURIComponent(uid)).then(function (j) {
+      var u = j.user || {};
+      $("dtName").textContent = u.name || uid;
+      $("dtEmail").textContent = (u.email || "") + (u.lastLogin ? " · último acceso: " + String(u.lastLogin).slice(0, 16).replace("T", " ") : "");
+      $("dtBadges").innerHTML =
+        '<span class="pill ' + (u.plan === "pro" ? "pro" : "free") + '">' + (u.plan === "pro" ? "PRO" : "Gratuito") + "</span>" +
+        '<span class="pill ' + (u.role === "admin" ? "admin" : "user") + '">' + (u.role === "admin" ? "Administrador" : "Usuario") + "</span>" +
+        (u.feed ? '<span class="pill feed">Feed activo</span>' : "");
+      var kp = [["Me gusta", u.likes], ["Canciones", u.songLikes], ["Notas", u.ratings],
+        ["Escuchas", u.plays], ["Playlists", u.playlists], ["Tiquetes", u.tickets]];
+      $("dtKpis").innerHTML = kp.map(function (x) {
+        return '<div class="kpi"><b>' + esc(x[1] == null ? 0 : x[1]) + "</b><span>" + esc(x[0]) + "</span></div>";
+      }).join("");
+      $("dtFeed").innerHTML = u.feed
+        ? '<div class="card" style="margin:0"><div class="card-head"><h2>Feed configurado</h2></div>' +
+          '<div class="chips">' + (u.feed.genres || []).map(function (g) { return '<span class="chip on">' + esc(g) + "</span>"; }).join("") +
+          '<span class="chip">' + ((u.feed.artists || []).length) + " semillas</span></div>" +
+          '<div class="muted" style="font-size:12.5px;margin-top:8px">Favoritos ' +
+          esc((u.feed.weights || {}).favorites) + "% · Descubrimiento " + esc((u.feed.weights || {}).discovery) +
+          "% · Tendencia " + esc((u.feed.weights || {}).trending) + "% · Amigos " + esc((u.feed.weights || {}).friends) + "%</div></div>"
+        : '<div class="muted" style="font-size:13px">Este perfil todavía no tiene feed: el algoritmo usa solo su historial.</div>';
+    }).catch(function (e) { $("dtName").textContent = "Error: " + e.message; });
+  }
+
+  $("dtClose").addEventListener("click", function () { $("modalDetail").classList.remove("open"); });
+  $("dtFeedBtn").addEventListener("click", function () {
+    $("modalDetail").classList.remove("open");
+    navigate("feeds");
+    if (detailUid) selectFeedUser(detailUid);
+  });
+
+  // ---- Crear usuario ----
+  $("createUserBtn").addEventListener("click", function () {
+    $("cuName").value = ""; $("cuEmail").value = ""; $("cuPass").value = "";
+    $("cuAdmin").checked = false; $("cuErr").textContent = "";
+    $("modalUser").classList.add("open");
+  });
+
+  $("cuSave").addEventListener("click", function () {
+    $("cuErr").textContent = "";
+    var name = $("cuName").value.trim(), email = $("cuEmail").value.trim(), pass = $("cuPass").value;
+    api("POST", "/api/admin/users", { name: name, email: email, password: pass })
+      .then(function (j) {
+        if ($("cuAdmin").checked) {
+          return api("POST", "/api/admin/users/" + encodeURIComponent(j.uid) + "/role", { role: "admin" })
+            .then(function () { return j; });
+        }
+        return j;
+      })
+      .then(function (j) {
+        $("modalUser").classList.remove("open");
+        toast("Usuario " + j.name + " creado.");
+        loadUsers(); loadAnalytics(); loadFeedUsers();
+      })
+      .catch(function (e) { $("cuErr").textContent = e.message; });
+  });
+
+  $("userSearchBtn").addEventListener("click", function () { search = $("userSearch").value.trim(); offset = 0; loadUsers(); });
+  $("userSearch").addEventListener("keydown", function (e) { if (e.key === "Enter") { search = $("userSearch").value.trim(); offset = 0; loadUsers(); } });
+  $("userFilter").addEventListener("change", function () { filter = $("userFilter").value; offset = 0; loadUsers(); });
+  $("prevBtn").addEventListener("click", function () { offset = Math.max(0, offset - limit); loadUsers(); });
+  $("nextBtn").addEventListener("click", function () { offset += limit; loadUsers(); });
+
+  // ---------- Feeds ----------
+  var feedUsers = [];
+  var feedSel = null;
+  var feedGenresAll = [];
+  var feedGenresSel = [];
+  var feedArtistsSel = [];
+
+  function loadFeedsView() {
+    loadFeedUsers();
+    loadSavedFeeds();
+    if (!feedGenresAll.length) {
+      api("GET", "/api/artists/filters").then(function (j) {
+        feedGenresAll = j.genres || [];
+        renderGenreChips();
+      }).catch(function () {});
+    }
+  }
+
+  function loadFeedUsers() {
+    api("GET", "/api/admin/users?limit=100&offset=0&search=" + encodeURIComponent($("feedSearch").value.trim()))
+      .then(function (j) {
+        feedUsers = j.users || [];
+        renderFeedUserList();
+      }).catch(function (e) { $("feedUserList").innerHTML = '<div class="empty">' + esc(e.message) + "</div>"; });
+  }
+
+  function renderFeedUserList() {
+    $("feedUserList").innerHTML = feedUsers.length ? feedUsers.map(function (u) {
+      return '<div class="feed-item' + (feedSel && feedSel.uid === u.uid ? " sel" : "") + '" data-uid="' + esc(u.uid) + '">' +
+        '<span class="u-av" style="background:' + avatarColor(u.uid) + '">' + esc((u.name || "?").charAt(0).toUpperCase()) + "</span>" +
+        '<div class="meta"><div class="nm">' + esc(u.name) + (u.role === "admin" ? ' <span class="pill admin">Admin</span>' : "") + "</div>" +
+        '<div class="em">' + esc(u.email) + "</div></div>" +
+        (u.hasFeed ? '<span class="pill feed" style="margin-left:auto">Feed</span>' : "") +
+        "</div>";
+    }).join("") : '<div class="empty">Sin usuarios.</div>';
+  }
+
+  $("feedSearch").addEventListener("input", function () { clearTimeout(window._fsT); window._fsT = setTimeout(loadFeedUsers, 250); });
+  $("feedUserList").addEventListener("click", function (e) {
+    var it = e.target.closest(".feed-item");
+    if (it) selectFeedUser(it.dataset.uid);
+  });
+
+  function selectFeedUser(uid) {
+    var u = feedUsers.filter(function (x) { return x.uid === uid; })[0];
+    if (!u) {
+      api("GET", "/api/admin/users?limit=100&search=" + encodeURIComponent(uid)).then(function (j) {
+        u = (j.users || []).filter(function (x) { return x.uid === uid; })[0];
+        if (u) { feedUsers.push(u); applyFeedUser(u); }
+      });
+      return;
+    }
+    applyFeedUser(u);
+  }
+
+  function applyFeedUser(u) {
+    feedSel = u;
+    renderFeedUserList();
+    $("feedEmpty").style.display = "none";
+    $("feedForm").style.display = "block";
+    $("feedUName").textContent = u.name;
+    $("feedUEmail").textContent = u.email;
+    $("feedUBadges").innerHTML =
+      '<span class="pill ' + (u.plan === "pro" ? "pro" : "free") + '">' + (u.plan === "pro" ? "PRO" : "Gratuito") + "</span>" +
+      '<span class="pill ' + (u.role === "admin" ? "admin" : "user") + '">' + (u.role === "admin" ? "Admin" : "Usuario") + "</span>";
+    $("feedNote").textContent = "";
+    $("feedArtistSearch").value = "";
+    $("feedArtistResults").innerHTML = "";
+    api("GET", "/api/admin/feeds/" + encodeURIComponent(u.uid)).then(function (j) {
+      var f = j.feed;
+      $("feedEnabled").checked = !f || f.enabled !== false;
+      feedGenresSel = f ? (f.genres || []) : [];
+      feedArtistsSel = f ? (f.artists || []) : [];
+      var w = (f && f.weights) || { favorites: 40, discovery: 30, trending: 20, friends: 10 };
+      setSlider("wFavorites", "vFavorites", w.favorites);
+      setSlider("wDiscovery", "vDiscovery", w.discovery);
+      setSlider("wTrending", "vTrending", w.trending);
+      setSlider("wFriends", "vFriends", w.friends);
+      $("feedNotes").value = f ? f.notes || "" : "";
+      renderGenreChips();
+      renderArtistChips();
+    }).catch(function (e) { toast(e.message, true); });
+  }
+
+  function setSlider(id, vid, val) {
+    $(id).value = val;
+    $(vid).textContent = val + "%";
+  }
+  ["Favorites", "Discovery", "Trending", "Friends"].forEach(function (k) {
+    document.addEventListener("input", function (e) {
+      if (e.target.id === "w" + k) $("v" + k).textContent = e.target.value + "%";
+    });
+  });
+
+  function renderGenreChips() {
+    $("feedGenres").innerHTML = feedGenresAll.length ? feedGenresAll.map(function (g) {
+      var on = feedGenresSel.indexOf(g) !== -1;
+      return '<span class="chip' + (on ? " on" : "") + '" data-g="' + esc(g) + '">' + esc(g) + "</span>";
+    }).join("") : '<span class="muted" style="font-size:13px">Cargando géneros…</span>';
+  }
+
+  $("feedGenres").addEventListener("click", function (e) {
+    var c = e.target.closest(".chip");
+    if (!c) return;
+    var g = c.dataset.g;
+    var i = feedGenresSel.indexOf(g);
+    if (i === -1) feedGenresSel.push(g); else feedGenresSel.splice(i, 1);
+    renderGenreChips();
+  });
+
+  function renderArtistChips() {
+    $("feedArtists").innerHTML = feedArtistsSel.length ? feedArtistsSel.map(function (a, i) {
+      return '<span class="chip on x" data-i="' + i + '">' + esc(a.name) + "</span>";
+    }).join("") : '<span class="muted" style="font-size:13px">Sin artistas semilla todavía.</span>';
+  }
+
+  $("feedArtists").addEventListener("click", function (e) {
+    var c = e.target.closest(".chip");
+    if (!c) return;
+    feedArtistsSel.splice(Number(c.dataset.i), 1);
+    renderArtistChips();
+  });
+
+  var artistSearchT = null;
+  $("feedArtistSearch").addEventListener("input", function () {
+    clearTimeout(artistSearchT);
+    var q = $("feedArtistSearch").value.trim();
+    if (!q) { $("feedArtistResults").innerHTML = ""; return; }
+    artistSearchT = setTimeout(function () {
+      fetch("/api/artists?search=" + encodeURIComponent(q) + "&limit=8")
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          var list = (j.artists || []).slice(0, 8);
+          $("feedArtistResults").innerHTML = list.length ? list.map(function (a) {
+            return '<button type="button" data-id="' + esc(a.id) + '" data-name="' + esc(a.name) + '">' +
+              esc(a.name) + ' <span class="muted">· ' + esc(a.genre || "") + "</span></button>";
+          }).join("") : '<div class="muted" style="font-size:12.5px;padding:6px 2px">Sin resultados.</div>';
+        }).catch(function () {});
+    }, 250);
+  });
+
+  $("feedArtistResults").addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    var id = b.dataset.id;
+    if (feedArtistsSel.some(function (a) { return String(a.id) === String(id); })) return;
+    if (feedArtistsSel.length >= 30) { toast("Máximo 30 artistas semilla.", true); return; }
+    feedArtistsSel.push({ id: id, name: b.dataset.name });
+    renderArtistChips();
+    $("feedArtistSearch").value = "";
+    $("feedArtistResults").innerHTML = "";
+  });
+
+  $("feedSave").addEventListener("click", function () {
+    if (!feedSel) return;
+    $("feedSave").disabled = true;
+    var body = {
+      enabled: $("feedEnabled").checked,
+      genres: feedGenresSel,
+      artists: feedArtistsSel,
+      weights: {
+        favorites: Number($("wFavorites").value),
+        discovery: Number($("wDiscovery").value),
+        trending: Number($("wTrending").value),
+        friends: Number($("wFriends").value)
+      },
+      notes: $("feedNotes").value
+    };
+    api("POST", "/api/admin/feeds/" + encodeURIComponent(feedSel.uid), body)
+      .then(function () {
+        $("feedNote").textContent = "Guardado.";
+        toast("Feed de " + feedSel.name + " guardado.");
+        loadSavedFeeds(); loadFeedUsers();
+      })
+      .catch(function (e) { toast(e.message, true); })
+      .then(function () { $("feedSave").disabled = false; });
+  });
+
+  $("feedReset").addEventListener("click", function () {
+    if (!feedSel) return;
+    if (!confirm("¿Quitar el feed de " + feedSel.name + "? El algoritmo volverá a usar solo su historial.")) return;
+    api("DELETE", "/api/admin/feeds/" + encodeURIComponent(feedSel.uid))
+      .then(function () {
+        toast("Feed eliminado.");
+        $("feedNote").textContent = "";
+        applyFeedUser(feedSel);
+        loadSavedFeeds(); loadFeedUsers();
+      })
+      .catch(function (e) { toast(e.message, true); });
+  });
+
+  function loadSavedFeeds() {
+    api("GET", "/api/admin/feeds").then(function (j) {
+      var rows = j.feeds || [];
+      $("feedRows").innerHTML = rows.length ? rows.map(function (f) {
+        var w = f.weights || {};
+        return "<tr>" +
+          '<td><div class="u-cell"><span class="u-av" style="background:' + avatarColor(f.uid) + '">' + esc((f.name || "?").charAt(0).toUpperCase()) + "</span>" +
+          '<div style="min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="em">' + esc(f.email) + "</div></div></div></td>" +
+          '<td><span class="pill ' + (f.plan === "pro" ? "pro" : "free") + '">' + (f.plan === "pro" ? "PRO" : "Gratis") + "</span></td>" +
+          "<td>" + ((f.genres || []).length ? '<span class="chip on">' + esc((f.genres || []).slice(0, 3).join(", ")) + ((f.genres || []).length > 3 ? " +" + ((f.genres.length) - 3) : "") + "</span>" : '<span class="muted">—</span>') + "</td>" +
+          '<td class="hide-s">' + esc(f.artistCount || 0) + "</td>" +
+          '<td class="hide-s muted" style="font-size:12px">' + esc("F" + (w.favorites || 0) + " · D" + (w.discovery || 0) + " · T" + (w.trending || 0) + " · A" + (w.friends || 0)) + "</td>" +
+          '<td class="hide-s muted" style="font-size:12px">' + esc(String(f.updatedAt || "").slice(0, 10)) + "</td>" +
+          '<td><div class="acts"><button class="btn ghost sm" data-feed-edit="' + esc(f.uid) + '">Editar</button>' +
+          '<button class="btn danger sm" data-feed-del="' + esc(f.uid) + '" data-name="' + esc(f.name) + '">Quitar</button></div></td>' +
+          "</tr>";
+      }).join("") : '<tr><td colspan="7" class="empty">Ningún perfil tiene feed todavía. Selecciona un usuario arriba para crear el primero.</td></tr>';
+    }).catch(function (e) { $("feedRows").innerHTML = '<tr><td colspan="7" class="empty">' + esc(e.message) + "</td></tr>"; });
+  }
+
+  $("feedRows").addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.feedEdit) { selectFeedUser(b.dataset.feedEdit); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    if (b.dataset.feedDel) {
+      if (!confirm("¿Quitar el feed de " + b.dataset.name + "?")) return;
+      api("DELETE", "/api/admin/feeds/" + encodeURIComponent(b.dataset.feedDel))
+        .then(function () { toast("Feed eliminado."); loadSavedFeeds(); loadFeedUsers(); })
+        .catch(function (e2) { toast(e2.message, true); });
+    }
+  });
+
+  // ---------- Soporte ----------
+  function loadOpenTicketsBadge() {
+    api("GET", "/api/admin/tickets?status=open&limit=1").then(function (j) {
+      var n = j.total || 0;
+      var el = $("navTk");
+      el.textContent = n;
+      el.style.display = n ? "inline-block" : "none";
+    }).catch(function () {});
   }
 
   function loadTickets() {
@@ -233,40 +1238,61 @@
         $("tkPageInfo").textContent = j.total ? (tkOffset + 1) + "–" + Math.min(tkOffset + tkLimit, j.total) + " de " + j.total : "0";
         $("tkPrevBtn").disabled = tkOffset === 0;
         $("tkNextBtn").disabled = tkOffset + tkLimit >= j.total;
-        $("tkRows").innerHTML = j.tickets.length
-          ? j.tickets.map(function (t) {
-              var when = String(t.createdAt || "").replace("T", " ").slice(0, 16);
-              var from = t.userName || t.email || (t.uid ? t.uid.slice(0, 8) : "anónimo");
-              return "<tr><td><strong>" + esc(t.subject) + "</strong></td>" +
-                '<td class="muted" title="' + esc(t.message) + '">' + esc(String(t.message).slice(0, 90)) +
-                (String(t.message).length > 90 ? "…" : "") + "</td>" +
-                '<td class="muted">' + esc(from) + "</td>" +
-                '<td class="muted">' + esc(when) + "</td>" +
-                '<td><span class="pill ' + (t.status === "resolved" ? "pro" : "free") + '">' +
-                (t.status === "resolved" ? "Resuelto" : "Abierto") + "</span></td><td>" +
-                '<button class="sm ' + (t.status === "resolved" ? "ghost" : "ok") + '" data-tkid="' + esc(t.id) +
-                '" data-tkstatus="' + (t.status === "resolved" ? "open" : "resolved") + '">' +
-                (t.status === "resolved" ? "Reabrir" : "Marcar resuelto") + "</button> " +
-                '<button class="sm danger" data-tkdel="' + esc(t.id) + '">Eliminar</button>' +
-                "</td></tr>";
-            }).join("")
-          : '<tr><td colspan="6" class="muted">Sin tiquets.</td></tr>';
+        $("tkRows").innerHTML = j.tickets.length ? j.tickets.map(function (t) {
+          var when = String(t.createdAt || "").replace("T", " ").slice(0, 16);
+          var from = t.userName || t.email || (t.uid ? t.uid.slice(0, 8) : "anónimo");
+          return "<tr>" +
+            "<td><strong>" + esc(t.subject) + "</strong></td>" +
+            '<td class="hide-s muted" title="' + esc(t.message) + '">' + esc(String(t.message).slice(0, 70)) + (String(t.message).length > 70 ? "…" : "") + "</td>" +
+            '<td class="muted">' + esc(from) + "</td>" +
+            '<td class="hide-s muted">' + esc(when) + "</td>" +
+            '<td><span class="pill ' + (t.status === "resolved" ? "resolved" : "open") + '">' + (t.status === "resolved" ? "Resuelto" : "Abierto") + "</span></td>" +
+            '<td><div class="acts">' +
+            '<button class="btn ghost sm" data-tkview="' + esc(t.id) + '">Ver</button>' +
+            '<button class="btn ' + (t.status === "resolved" ? "ghost" : "ok") + ' sm" data-tkid="' + esc(t.id) + '" data-tkstatus="' + (t.status === "resolved" ? "open" : "resolved") + '">' +
+            (t.status === "resolved" ? "Reabrir" : "Resolver") + "</button>" +
+            '<button class="btn danger sm" data-tkdel="' + esc(t.id) + '">Eliminar</button>' +
+            "</div></td></tr>";
+        }).join("") : '<tr><td colspan="6" class="empty">Sin tiquetes.</td></tr>';
       })
-      .catch(function (e) { $("tkRows").innerHTML = '<tr><td colspan="6" class="muted">' + esc(e.message) + "</td></tr>"; });
+      .catch(function (e) { $("tkRows").innerHTML = '<tr><td colspan="6" class="empty">' + esc(e.message) + "</td></tr>"; });
   }
+
+  var tkCurrent = null;
+  function openTicket(id) {
+    api("GET", "/api/admin/tickets?limit=500&search=").then(function (j) {
+      var t = (j.tickets || []).filter(function (x) { return x.id === id; })[0];
+      if (!t) { toast("Tiquet no encontrado.", true); return; }
+      tkCurrent = t;
+      $("tkdSubject").textContent = t.subject;
+      $("tkdMeta").textContent = (t.userName || t.email || t.uid || "") + " · " + String(t.createdAt || "").replace("T", " ").slice(0, 16) + " · " + (t.status === "resolved" ? "Resuelto" : "Abierto");
+      $("tkdBody").textContent = t.message;
+      $("tkdToggle").textContent = t.status === "resolved" ? "Reabrir" : "Marcar resuelto";
+      $("modalTicket").classList.add("open");
+    });
+  }
+
+  $("tkdToggle").addEventListener("click", function () {
+    if (!tkCurrent) return;
+    var next = tkCurrent.status === "resolved" ? "open" : "resolved";
+    api("POST", "/api/admin/tickets/status", { id: tkCurrent.id, status: next })
+      .then(function () { $("modalTicket").classList.remove("open"); loadTickets(); loadOpenTicketsBadge(); })
+      .catch(function (e) { toast(e.message, true); });
+  });
 
   $("tkRows").addEventListener("click", function (e) {
     var b = e.target.closest("button");
     if (!b) return;
+    if (b.dataset.tkview) return openTicket(b.dataset.tkview);
     if (b.dataset.tkid) {
       api("POST", "/api/admin/tickets/status", { id: b.dataset.tkid, status: b.dataset.tkstatus })
-        .then(function () { loadTickets(); loadStats(); })
-        .catch(function (e2) { alert(e2.message); });
+        .then(function () { loadTickets(); loadOpenTicketsBadge(); })
+        .catch(function (e2) { toast(e2.message, true); });
     } else if (b.dataset.tkdel) {
       if (!confirm("¿Eliminar este tiquet definitivamente?")) return;
       api("DELETE", "/api/admin/tickets/" + encodeURIComponent(b.dataset.tkdel))
-        .then(function () { loadTickets(); loadStats(); })
-        .catch(function (e2) { alert(e2.message); });
+        .then(function () { loadTickets(); loadOpenTicketsBadge(); })
+        .catch(function (e2) { toast(e.message, true); });
     }
   });
 
@@ -276,61 +1302,43 @@
   $("tkPrevBtn").addEventListener("click", function () { tkOffset = Math.max(0, tkOffset - tkLimit); loadTickets(); });
   $("tkNextBtn").addEventListener("click", function () { tkOffset += tkLimit; loadTickets(); });
 
-  $("userRows").addEventListener("click", function (e) {
-    var b = e.target.closest("button");
-    if (!b) return;
-    if (b.dataset.uid) {
-      if (!confirm("¿Cambiar el plan de este usuario a " + b.dataset.plan + "?")) return;
-      api("POST", "/api/admin/plan", { uid: b.dataset.uid, plan: b.dataset.plan })
-        .then(function () { loadUsers(); loadStats(); })
-        .catch(function (e2) { alert(e2.message); });
-    } else if (b.dataset.del) {
-      if (!confirm('¿Eliminar definitivamente a "' + b.dataset.name + '"? Se borran sus datos.')) return;
-      api("DELETE", "/api/admin/users/" + encodeURIComponent(b.dataset.del))
-        .then(function () { loadUsers(); loadStats(); })
-        .catch(function (e2) { alert(e2.message); });
-    }
+  // ---------- Utilidades de UI ----------
+  document.querySelectorAll("[data-close]").forEach(function (b) {
+    b.addEventListener("click", function () { $(b.dataset.close).classList.remove("open"); });
   });
-
+  document.querySelectorAll(".modal-bg").forEach(function (m) {
+    m.addEventListener("click", function (e) { if (e.target === m) m.classList.remove("open"); });
+  });
+  document.querySelectorAll(".nav button[data-nav]").forEach(function (b) {
+    b.addEventListener("click", function () { navigate(b.dataset.nav); });
+  });
+  $("menuBtn").addEventListener("click", function () { $("sidebar").classList.toggle("open"); });
+  $("refreshBtn").addEventListener("click", function () {
+    loadAll();
+    loadOpenTicketsBadge();
+    toast("Datos actualizados.");
+  });
+  $("logoutBtn").addEventListener("click", function () {
+    try { if (window.firebase && firebase.auth) firebase.auth().signOut(); } catch (_) {}
+    showLogin();
+  });
   $("lgBtn").addEventListener("click", doLogin);
   $("lgPass").addEventListener("keydown", function (e) { if (e.key === "Enter") doLogin(); });
-  function doLogin() {
-    $("lgErr").textContent = "";
-    fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: $("lgUser").value, password: $("lgPass").value })
-    }).then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }); })
-      .then(function (o) {
-        if (!o.r.ok || !o.j.token) throw new Error(o.j.error || "Error de acceso.");
-        token = o.j.token;
-        localStorage.setItem("adminToken", token);
-        showApp();
-      })
-      .catch(function (e) { $("lgErr").textContent = e.message; });
-  }
-
-  $("logoutBtn").addEventListener("click", showLogin);
-  $("refreshBtn").addEventListener("click", function () { loadStats(); loadUsers(); loadTickets(); });
-  $("userSearchBtn").addEventListener("click", function () { search = $("userSearch").value.trim(); offset = 0; loadUsers(); });
-  $("userSearch").addEventListener("keydown", function (e) { if (e.key === "Enter") { search = $("userSearch").value.trim(); offset = 0; loadUsers(); } });
-  $("prevBtn").addEventListener("click", function () { offset = Math.max(0, offset - limit); loadUsers(); });
-  $("nextBtn").addEventListener("click", function () { offset += limit; loadUsers(); });
-
-  var tabBtns = document.querySelectorAll(".tabs button");
-  tabBtns.forEach(function (b) {
-    b.addEventListener("click", function () {
-      tabBtns.forEach(function (x) { x.classList.remove("active"); });
-      b.classList.add("active");
-      ["stats", "users", "support"].forEach(function (t) {
-        var el = $("tab" + t.charAt(0).toUpperCase() + t.slice(1));
-        if (el) el.style.display = b.dataset.tab === t ? "block" : "none";
-      });
-      if (b.dataset.tab === "support") loadTickets();
-    });
+  window.addEventListener("hashchange", function () {
+    var v = location.hash.slice(1);
+    if (v in TITLES && $("appView").style.display === "block") navigate(v);
   });
 
-  if (token) showApp(); else showLogin();
+  // ---------- Arranque ----------
+  if (token) {
+    showApp();
+  } else {
+    $("lgHint").textContent = "Buscando sesión de la app…";
+    sessionFromApp().then(function (ok) {
+      $("lgHint").textContent = "Si iniciaste sesión en la app uBeat con una cuenta administradora, entrarás automáticamente.";
+      if (ok) showApp(); else showLogin();
+    });
+  }
 })();
 </script>
 </body>

@@ -660,13 +660,56 @@ app.post("/api/plan/cancel", async (req, res) => {
   }
 });
 
+// ---------- Perfiles de usuario (rol administrador) ----------
+// Colección "profiles" (doc id = uid): { uid, role: "user" | "admin", ... }.
+const PROFILES_COL = "profiles";
+const FEEDS_COL = "feeds";
+const roleCache = new Map(); // uid -> { at, role }
+const ROLE_TTL_MS = 30e3;
+
+async function getUserRole(uid) {
+  if (!uid) return "user";
+  const key = String(uid);
+  const hit = roleCache.get(key);
+  if (hit && Date.now() - hit.at < ROLE_TTL_MS) return hit.role;
+  let role = "user";
+  if (firestoreReady) {
+    try {
+      const d = await db.collection(PROFILES_COL).doc(key).get();
+      if (d.exists && d.data() && d.data().role === "admin") role = "admin";
+    } catch (_) {}
+  }
+  roleCache.set(key, { at: Date.now(), role });
+  return role;
+}
+
+async function setUserRole(uid, role, by) {
+  const v = role === "admin" ? "admin" : "user";
+  if (!firestoreReady) return v;
+  await db
+    .collection(PROFILES_COL)
+    .doc(String(uid))
+    .set(
+      {
+        uid: String(uid),
+        role: v,
+        updatedAt: new Date().toISOString(),
+        updatedBy: by || "admin",
+      },
+      { merge: true }
+    );
+  roleCache.delete(String(uid));
+  return v;
+}
+
 app.get("/api/me", async (req, res) => {
   try {
     const uid = await authUid(req);
     if (!uid) return res.status(401).json({ ok: false, error: "No autenticado." });
     const me = await meFromUid(uid);
     if (!me) return res.status(401).json({ ok: false, error: "No autenticado." });
-    res.json({ ok: true, user: me });
+    const [role, plan] = await Promise.all([getUserRole(uid), getUserPlan(uid)]);
+    res.json({ ok: true, user: { ...me, role, plan }, role, plan });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -1151,6 +1194,149 @@ app.post("/api/plays", async (req, res) => {
   }
 });
 
+// ---------- Feed por perfil (algoritmo "desde el principio") ----------
+// Cada perfil puede tener un feed configurado desde el panel de
+// administración: géneros, artistas semilla y pesos (favoritos,
+// descubrimiento, tendencia, amigos). El feed también permite recomendar
+// desde el minuto cero, aunque el usuario todavía no tenga interacciones.
+const feedCache = new Map(); // uid -> { at, feed|null }
+const FEED_TTL_MS = 60e3;
+let popCache = null;
+let popAt = 0;
+
+function invalidateFeed(uid) {
+  if (uid) feedCache.delete(String(uid));
+}
+
+async function getFeed(uid) {
+  if (!uid || !firestoreReady) return null;
+  const key = String(uid);
+  const hit = feedCache.get(key);
+  if (hit && Date.now() - hit.at < FEED_TTL_MS) return hit.feed;
+  let feed = null;
+  try {
+    const d = await db.collection(FEEDS_COL).doc(key).get();
+    if (d.exists && d.data()) feed = d.data();
+  } catch (_) {}
+  const val = feed && feed.enabled !== false ? feed : null;
+  feedCache.set(key, { at: Date.now(), feed: val });
+  return val;
+}
+
+// Popularidad global (likes por artista), caché de 5 min.
+async function popularityMap() {
+  if (popCache && Date.now() - popAt < 300e3) return popCache;
+  const m = new Map();
+  if (firestoreReady) {
+    try {
+      const snap = await db.collection(LIKES_COL).limit(5000).get();
+      snap.docs.forEach((d) => {
+        const id = String(d.data().artistId);
+        m.set(id, (m.get(id) || 0) + 1);
+      });
+    } catch (_) {}
+  }
+  popCache = m;
+  popAt = Date.now();
+  return m;
+}
+
+// Artistas que les gustan a mis amigos (para el peso "amigos" del feed).
+async function friendsLikeMap(uid) {
+  const m = new Map();
+  if (!firestoreReady) return m;
+  try {
+    const [s1, s2] = await Promise.all([
+      db.collection(FRIENDS_COL).where("a", "==", uid).get(),
+      db.collection(FRIENDS_COL).where("b", "==", uid).get(),
+    ]);
+    const fuids = [
+      ...new Set(
+        [...s1.docs, ...s2.docs]
+          .filter((d) => d.data().status === "accepted")
+          .map((d) => (d.data().a === uid ? d.data().b : d.data().a))
+      ),
+    ].slice(0, 30);
+    if (!fuids.length) return m;
+    const snap = await db.collection(LIKES_COL).where("uid", "in", fuids).limit(300).get();
+    snap.docs.forEach((d) => {
+      const id = String(d.data().artistId);
+      m.set(id, (m.get(id) || 0) + 1);
+    });
+  } catch (_) {}
+  return m;
+}
+
+// Ranking del feed sin historial: sirve para arrancar el algoritmo.
+function feedColdRank(feed, all, pop, friendLikes) {
+  const genreSet = new Set(feed.genres || []);
+  const seedIds = new Set((feed.artists || []).map((a) => String(a.id)));
+  const seedName = new Map((feed.artists || []).map((a) => [String(a.id), a.name]));
+  const w = feed.weights || {};
+  const f = Number(w.favorites || 0) / 100;
+  const d = Number(w.discovery || 0) / 100;
+  const t = Number(w.trending || 0) / 100;
+  const fr = Number(w.friends || 0) / 100;
+  const maxPop = Math.max(1, ...pop.values());
+  const maxFriend = Math.max(1, ...friendLikes.values());
+  return all
+    .map((a) => {
+      const id = String(a.id);
+      const genreHit = a.genre && genreSet.has(a.genre);
+      let pts = 0;
+      let why = "";
+      if (seedIds.has(id)) {
+        pts += 8 * f;
+        why = `Porque elegiste a ${seedName.get(id) || a.name}`;
+      } else if (genreHit) {
+        pts += 3 * f;
+        why = `Nuevo de tu género ${a.genre}`;
+      }
+      if (t > 0) pts += 2 * t * ((pop.get(id) || 0) / maxPop);
+      if (fr > 0 && friendLikes.has(id)) pts += 3 * fr * (friendLikes.get(id) / maxFriend);
+      if (d > 0) pts += Math.random() * 3 * d;
+      if (!why) {
+        if (t > 0 && (pop.get(id) || 0) > 0) why = "Tendencia en uBeat";
+        else if (fr > 0 && friendLikes.has(id)) why = "A tus amigos les gusta";
+        else why = "Para descubrir";
+      }
+      return { a, pts, why };
+    })
+    .filter((x) => x.pts > 0)
+    .sort((x, y) => y.pts - x.pts)
+    .slice(0, 20)
+    .map((x) => ({ ...x.a, score: Math.round(x.pts * 10) / 10, reason: x.why }));
+}
+
+// Boosts del feed sobre un ranking con historial (likes/escuchas ya rankeados).
+function applyFeedBoosts(feed, all, add, pop, friendLikes) {
+  const genreSet = new Set(feed.genres || []);
+  const seedIds = new Map((feed.artists || []).map((a) => [String(a.id), a.name]));
+  const w = feed.weights || {};
+  const f = Number(w.favorites || 0) / 100;
+  const d = Number(w.discovery || 0) / 100;
+  const t = Number(w.trending || 0) / 100;
+  const fr = Number(w.friends || 0) / 100;
+  const maxPop = Math.max(1, ...pop.values());
+  const maxFriend = Math.max(1, ...friendLikes.values());
+  all.forEach((a) => {
+    const id = String(a.id);
+    if (seedIds.has(id)) add(id, 6 * f, `Porque elegiste a ${seedIds.get(id) || a.name}`);
+    else if (a.genre && genreSet.has(a.genre)) add(id, 2.5 * f, `Nuevo de tu género ${a.genre}`);
+    if (t > 0) add(id, 1.5 * t * ((pop.get(id) || 0) / maxPop), "Tendencia en uBeat");
+    if (fr > 0 && friendLikes.has(id))
+      add(id, 2 * fr * (friendLikes.get(id) / maxFriend), "A tus amigos les gusta");
+  });
+  // Descubrimiento: inyecta novedades del catálogo con peso aleatorio.
+  if (d > 0) {
+    const n = Math.min(12, Math.max(3, Math.round(all.length * 0.04)));
+    for (let i = 0; i < n; i++) {
+      const a = all[Math.floor(Math.random() * all.length)];
+      if (a) add(String(a.id), (0.5 + Math.random() * 2.5) * d, "Para descubrir");
+    }
+  }
+}
+
 // GET /api/for-you -> rail ponderado con motivos (solo plan PRO)
 app.get("/api/for-you", async (req, res) => {
   try {
@@ -1160,14 +1346,24 @@ app.get("/api/for-you", async (req, res) => {
     if (hit && Date.now() - hit.at < FORYOU_TTL_MS) return res.json(hit.data);
     const all = await allArtistsDocs();
     const byId = new Map(all.map((a) => [String(a.id), a]));
-    const [likesS, tasteS] = await Promise.all([
+    const [likesS, tasteS, feed] = await Promise.all([
       db.collection(LIKES_COL).where("uid", "==", uid).get(),
       db.collection(TASTE_COL).where("uid", "==", uid).get(),
+      getFeed(uid),
     ]);
     const likedIds = new Set(likesS.docs.map((d) => String(d.data().artistId)));
     const plays = new Map();
     tasteS.docs.forEach((d) => plays.set(String(d.data().artistId), Number(d.data().plays || 0)));
     if (!likedIds.size && !plays.size) {
+      // Sin historial: si el perfil tiene feed configurado, el algoritmo
+      // arranca desde el principio con sus gustos declarados.
+      if (feed) {
+        const [pop, friendLikes] = await Promise.all([popularityMap(), friendsLikeMap(uid)]);
+        const ranked = feedColdRank(feed, all, pop, friendLikes);
+        const coldPayload = { ok: true, artists: ranked, cold: false, source: "feed" };
+        forYouCache.set(uid, { at: Date.now(), data: coldPayload });
+        return res.json(coldPayload);
+      }
       const cold = { ok: true, artists: [], cold: true, source: "taste" };
       forYouCache.set(uid, { at: Date.now(), data: cold });
       return res.json(cold);
@@ -1178,8 +1374,16 @@ app.get("/api/for-you", async (req, res) => {
     const add = (id, pts, why) => {
       if (!byId.has(String(id))) return;
       score.set(String(id), (score.get(String(id)) || 0) + pts);
-      if (!reason.has(String(id))) reason.set(String(id), why);
+      if (why && !reason.has(String(id))) reason.set(String(id), why);
     };
+    // El feed tiene prioridad de motivo sobre la expansión por similitud,
+    // pero nunca sobre los "Me gusta" ni las escuchas reales.
+    let pop = new Map();
+    let friendLikes = new Map();
+    if (feed) {
+      [pop, friendLikes] = await Promise.all([popularityMap(), friendsLikeMap(uid)]);
+      applyFeedBoosts(feed, all, add, pop, friendLikes);
+    }
     likedIds.forEach((id) => {
       const a = byId.get(String(id));
       if (a) add(id, LIKE_W, `Porque te gusta ${a.name}`);
@@ -1202,7 +1406,8 @@ app.get("/api/for-you", async (req, res) => {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20)
       .map(([id, pts]) => ({ ...byId.get(String(id)), score: Math.round(pts * 10) / 10, reason: reason.get(String(id)) }));
-    const payload = { ok: true, artists: ranked, cold: false, source: lastfmKey() ? "taste+lastfm" : "taste" };
+    const src = [lastfmKey() ? "taste+lastfm" : "taste", feed ? "feed" : ""].filter(Boolean).join("+");
+    const payload = { ok: true, artists: ranked, cold: false, source: src };
     forYouCache.set(uid, { at: Date.now(), data: payload });
     res.json(payload);
   } catch (err) {
@@ -1237,9 +1442,10 @@ async function discoverArtists(uid) {
   const all = await allArtistsDocs();
   let list = shuffle(all);
   if (uid) {
-    const [likesS, tasteS] = await Promise.all([
+    const [likesS, tasteS, feed] = await Promise.all([
       db.collection(LIKES_COL).where("uid", "==", uid).get(),
       db.collection(TASTE_COL).where("uid", "==", uid).get(),
+      getFeed(uid),
     ]);
     const likedIds = new Set(likesS.docs.map((d) => String(d.data().artistId)));
     const plays = new Map();
@@ -1253,6 +1459,10 @@ async function discoverArtists(uid) {
       };
       likedIds.forEach((id) => add(id, LIKE_W));
       plays.forEach((n, id) => add(id, Math.min(n, 10) * PLAY_W));
+      if (feed) {
+        const [pop, friendLikes] = await Promise.all([popularityMap(), friendsLikeMap(uid)]);
+        applyFeedBoosts(feed, all, add, pop, friendLikes);
+      }
       const seeds = [...score.entries()]
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
@@ -1271,6 +1481,12 @@ async function discoverArtists(uid) {
         .map((x) => x.a);
       const rest = shuffle(all.filter((a) => !score.has(String(a.id))));
       list = ranked.concat(rest);
+    } else if (feed) {
+      // Sin historial: el feed ordena Descubrir desde el primer día.
+      const [pop, friendLikes] = await Promise.all([popularityMap(), friendsLikeMap(uid)]);
+      const ranked = feedColdRank(feed, all, pop, friendLikes).map(({ score, reason, ...a }) => a);
+      const seen = new Set(ranked.map((a) => String(a.id)));
+      list = ranked.concat(shuffle(all.filter((a) => !seen.has(String(a.id)))));
     }
   }
   discoverRankCache.set(key, { at: Date.now(), list });
@@ -3216,7 +3432,29 @@ function adminRateLimited(req) {
   return r.n > 5;
 }
 
-app.post("/api/admin/login", (req, res) => {
+// Cuenta de administrador creada en la app: se valida contra Firebase
+// Authentication (signInWithPassword) y exige rol "admin" en "profiles".
+const FIREBASE_WEB_API_KEY =
+  process.env.FIREBASE_API_KEY || "AIzaSyCAS9hQFOE5A5dyfdjbYWH4JnLbkDkunZY";
+
+async function appAdminLogin(email, password) {
+  const r = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_WEB_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    }
+  );
+  if (!r.ok) return { ok: false, reason: "creds" };
+  const j = await r.json();
+  const decoded = await getAuth().verifyIdToken(j.idToken);
+  const role = await getUserRole(decoded.uid);
+  if (role !== "admin") return { ok: false, reason: "role" };
+  return { ok: true, uid: decoded.uid };
+}
+
+app.post("/api/admin/login", async (req, res) => {
   try {
     if (adminRateLimited(req))
       return res
@@ -3225,12 +3463,43 @@ app.post("/api/admin/login", (req, res) => {
     const { u, p } = adminCredentials();
     const user = String((req.body && req.body.user) || "");
     const pass = String((req.body && req.body.password) || "");
-    if (user !== u || pass !== p)
-      return res.status(401).json({ ok: false, error: "Credenciales incorrectas." });
-    const token = signAdminToken(Date.now() + ADMIN_TOKEN_TTL_MS);
-    res.json({ ok: true, token });
+    if (user === u && pass === p) {
+      const token = signAdminToken(Date.now() + ADMIN_TOKEN_TTL_MS);
+      return res.json({ ok: true, token, mode: "master" });
+    }
+    if (user.includes("@")) {
+      const r = await appAdminLogin(user, pass);
+      if (r.ok) {
+        const token = signAdminToken(Date.now() + ADMIN_TOKEN_TTL_MS);
+        const me = await meFromUid(r.uid);
+        return res.json({ ok: true, token, mode: "user", uid: r.uid, name: me ? me.name : "" });
+      }
+      if (r.reason === "role")
+        return res
+          .status(403)
+          .json({ ok: false, error: "Esta cuenta no tiene permisos de administración." });
+    }
+    res.status(401).json({ ok: false, error: "Credenciales incorrectas." });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Acceso al panel desde la sesión de la app: el cliente envía su ID token
+// de Firebase y, si su rol es admin, recibe un token de panel.
+app.post("/api/admin/session", async (req, res) => {
+  try {
+    const idToken = String((req.body && req.body.idToken) || "");
+    if (!idToken) return res.status(400).json({ ok: false, error: "Falta el token." });
+    const decoded = await getAuth().verifyIdToken(idToken);
+    const role = await getUserRole(decoded.uid);
+    if (role !== "admin")
+      return res.status(403).json({ ok: false, error: "Sin permisos de administración." });
+    const token = signAdminToken(Date.now() + ADMIN_TOKEN_TTL_MS);
+    const me = await meFromUid(decoded.uid);
+    res.json({ ok: true, token, uid: decoded.uid, name: me ? me.name : "" });
+  } catch (err) {
+    res.status(401).json({ ok: false, error: "Sesión no válida." });
   }
 });
 
@@ -3303,12 +3572,19 @@ app.get("/api/admin/users", async (req, res) => {
     const subs = new Map();
     const subSnap = await db.collection(SUBS_COL).get();
     subSnap.docs.forEach((d) => subs.set(d.id, d.data().plan === "pro" ? "pro" : "free"));
+    const roles = new Map();
+    const feedsSnap = await db.collection(FEEDS_COL).get();
+    const feedUids = new Set(feedsSnap.docs.map((d) => d.id));
+    const profSnap = await db.collection(PROFILES_COL).get();
+    profSnap.docs.forEach((d) => roles.set(d.id, d.data().role === "admin" ? "admin" : "user"));
     let rows = list.map((u) => ({
       uid: u.uid,
       name: u.displayName || String(u.email || "").split("@")[0],
       email: u.email || "",
       created: u.metadata && u.metadata.creationTime ? u.metadata.creationTime : "",
       plan: subs.get(u.uid) || "free",
+      role: roles.get(u.uid) || "user",
+      hasFeed: feedUids.has(u.uid),
     }));
     if (search)
       rows = rows.filter(
@@ -3333,6 +3609,355 @@ app.post("/api/admin/plan", async (req, res) => {
       return res.status(503).json({ ok: false, error: "Firestore no disponible." });
     await setUserPlan(uid, plan, "admin");
     res.json({ ok: true, uid, plan });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Crear un usuario desde el panel (Firebase Authentication en el servidor).
+app.post("/api/admin/users", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const name = String(b.name || "").trim().slice(0, 60);
+    const email = String(b.email || "").trim().toLowerCase();
+    const password = String(b.password || "");
+    if (!name || !email || !password)
+      return res.status(400).json({ ok: false, error: "Nombre, email y contraseña son obligatorios." });
+    if (password.length < 6)
+      return res.status(400).json({ ok: false, error: "La contraseña debe tener 6+ caracteres." });
+    if (!firestoreReady) return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    const u = await getAuth().createUser({ email, password, displayName: name });
+    await db
+      .collection(PROFILES_COL)
+      .doc(u.uid)
+      .set({ uid: u.uid, name, email, role: "user", createdAt: new Date().toISOString() }, { merge: true });
+    res.json({ ok: true, uid: u.uid, name, email });
+  } catch (err) {
+    const code = err && err.code;
+    if (code === "auth/email-already-exists")
+      return res.status(409).json({ ok: false, error: "Ese email ya está registrado." });
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Promover/despromover administrador (visible desde el panel).
+app.post("/api/admin/users/:uid/role", async (req, res) => {
+  try {
+    const uid = String(req.params.uid);
+    const role = String((req.body && req.body.role) || "");
+    if (!uid) return res.status(400).json({ ok: false, error: "Falta el uid." });
+    if (role !== "admin" && role !== "user")
+      return res.status(400).json({ ok: false, error: "Rol inválido (admin | user)." });
+    if (!firestoreReady) return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    const v = await setUserRole(uid, role, "panel");
+    res.json({ ok: true, uid, role: v });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Feeds por perfil (configuración del algoritmo "Para ti" / Descubrir) ----
+function normalizeFeed(b) {
+  const str = (v, n) => String(v || "").trim().slice(0, n);
+  const num01 = (v, d) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : d;
+  };
+  const genres = Array.isArray(b.genres) ? [...new Set(b.genres.map((g) => str(g, 40)).filter(Boolean))].slice(0, 20) : [];
+  const artists = (Array.isArray(b.artists) ? b.artists : [])
+    .map((a) => ({ id: str(a && a.id, 40), name: str(a && a.name, 80) }))
+    .filter((a) => a.id && a.name)
+    .slice(0, 30);
+  return {
+    enabled: b.enabled !== false,
+    genres,
+    artists,
+    weights: {
+      favorites: num01(b.weights && b.weights.favorites, 40),
+      discovery: num01(b.weights && b.weights.discovery, 30),
+      trending: num01(b.weights && b.weights.trending, 20),
+      friends: num01(b.weights && b.weights.friends, 10),
+    },
+    notes: str(b.notes, 500),
+  };
+}
+
+app.get("/api/admin/feeds", async (req, res) => {
+  try {
+    if (!firestoreReady) return res.json({ ok: true, feeds: [] });
+    const snap = await db.collection(FEEDS_COL).get();
+    const rows = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+    // Se enriquecen con los datos de la cuenta (nombre/email/plan).
+    let users = [];
+    try {
+      const page = await getAuth().listUsers(1000);
+      users = page.users;
+    } catch (_) {}
+    const byUid = new Map(users.map((u) => [u.uid, u]));
+    const subs = new Map();
+    (await db.collection(SUBS_COL).get()).docs.forEach((d) => subs.set(d.id, d.data().plan === "pro" ? "pro" : "free"));
+    const out = rows
+      .map((f) => {
+        const u = byUid.get(f.uid);
+        return {
+          uid: f.uid,
+          name: (u && (u.displayName || String(u.email || "").split("@")[0])) || f.name || f.uid,
+          email: (u && u.email) || f.email || "",
+          plan: subs.get(f.uid) || "free",
+          enabled: f.enabled !== false,
+          genres: f.genres || [],
+          artistCount: (f.artists || []).length,
+          weights: f.weights || null,
+          notes: f.notes || "",
+          updatedAt: f.updatedAt || "",
+        };
+      })
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    res.json({ ok: true, feeds: out, total: out.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/admin/feeds/:uid", async (req, res) => {
+  try {
+    if (!firestoreReady) return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    const d = await db.collection(FEEDS_COL).doc(String(req.params.uid)).get();
+    if (!d.exists) return res.json({ ok: true, feed: null });
+    res.json({ ok: true, feed: { uid: d.id, ...d.data() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/admin/feeds/:uid", async (req, res) => {
+  try {
+    const uid = String(req.params.uid);
+    if (!uid) return res.status(400).json({ ok: false, error: "Falta el uid." });
+    if (!firestoreReady) return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    const feed = normalizeFeed(req.body || {});
+    const doc = { uid, ...feed, updatedAt: new Date().toISOString(), updatedBy: "panel" };
+    await db.collection(FEEDS_COL).doc(uid).set(doc, { merge: true });
+    invalidateForYou(uid);
+    invalidateFeed(uid);
+    popCache = null;
+    discoverRankCache.delete(uid || "guest");
+    res.json({ ok: true, uid, feed: doc });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete("/api/admin/feeds/:uid", async (req, res) => {
+  try {
+    const uid = String(req.params.uid);
+    if (!firestoreReady) return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    await db.collection(FEEDS_COL).doc(uid).delete();
+    invalidateForYou(uid);
+    invalidateFeed(uid);
+    popCache = null;
+    discoverRankCache.delete(uid || "guest");
+    res.json({ ok: true, uid });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Usuario concreto (detalle del panel) ----
+app.get("/api/admin/users/:uid", async (req, res) => {
+  try {
+    const uid = String(req.params.uid);
+    if (!firestoreReady) return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    let account = null;
+    try {
+      const u = await getAuth().getUser(uid);
+      account = {
+        uid: u.uid,
+        name: u.displayName || String(u.email || "").split("@")[0],
+        email: u.email || "",
+        created: u.metadata && u.metadata.creationTime ? u.metadata.creationTime : "",
+        lastLogin: u.metadata && u.metadata.lastSignInTime ? u.metadata.lastSignInTime : "",
+      };
+    } catch (_) {}
+    const [role, plan, likesS, ratS, tasteS, songS, plS, tkS, feedD] = await Promise.all([
+      getUserRole(uid),
+      getUserPlan(uid),
+      db.collection(LIKES_COL).where("uid", "==", uid).get(),
+      db.collection(RATINGS_COL).where("uid", "==", uid).get(),
+      db.collection(TASTE_COL).where("uid", "==", uid).get(),
+      db.collection(SONGLIKES_COL).where("uid", "==", uid).get(),
+      db.collection(PLAYLISTS_COL).where("uid", "==", uid).get(),
+      db.collection(TICKETS_COL).where("uid", "==", uid).get(),
+      db.collection(FEEDS_COL).doc(uid).get(),
+    ]);
+    res.json({
+      ok: true,
+      user: {
+        ...account,
+        uid,
+        role,
+        plan,
+        likes: likesS.size,
+        ratings: ratS.size,
+        artistsPlayed: tasteS.size,
+        plays: tasteS.docs.reduce((n, d) => n + Number(d.data().plays || 0), 0),
+        songLikes: songS.size,
+        playlists: plS.size,
+        tickets: tkS.size,
+        feed: feedD.exists ? { uid, ...feedD.data() } : null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Analíticas para los gráficos del panel (caché 60 s) ----
+let analyticsCache = null;
+let analyticsAt = 0;
+
+function dayKey(iso) {
+  return String(iso || "").slice(0, 10);
+}
+
+function lastNDays(n) {
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400e3);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+function seriesByDay(rows, field, days) {
+  const counts = {};
+  rows.forEach((r) => {
+    const k = dayKey(r[field] || r.updatedAt || r.createdAt);
+    if (k) counts[k] = (counts[k] || 0) + 1;
+  });
+  return days.map((d) => ({ day: d, value: counts[d] || 0 }));
+}
+
+async function buildAnalytics() {
+  const days14 = lastNDays(14);
+  const days30 = lastNDays(30);
+  const [usersPage, docs, likesS, songS, ratS, tasteS, subsS, tkS, tkOpenS] = await Promise.all([
+    getAuth().listUsers(1000),
+    allArtistsDocs(),
+    db.collection(LIKES_COL).limit(5000).get(),
+    db.collection(SONGLIKES_COL).limit(5000).get(),
+    db.collection(RATINGS_COL).limit(5000).get(),
+    db.collection(TASTE_COL).limit(5000).get(),
+    db.collection(SUBS_COL).get(),
+    db.collection(TICKETS_COL).count().get(),
+    db.collection(TICKETS_COL).where("status", "==", "open").count().get(),
+  ]);
+  const users = usersPage.users || [];
+  const likeRows = likesS.docs.map((d) => d.data());
+  const songRows = songS.docs.map((d) => d.data());
+  const ratRows = ratS.docs.map((d) => d.data());
+  const tasteRows = tasteS.docs.map((d) => d.data());
+
+  // Altas por día (30 días) a partir de la fecha de creación de la cuenta.
+  const signupCounts = {};
+  users.forEach((u) => {
+    const c = u.metadata && u.metadata.creationTime;
+    if (c) {
+      const k = dayKey(new Date(c).toISOString());
+      signupCounts[k] = (signupCounts[k] || 0) + 1;
+    }
+  });
+  const signups = days30.map((d) => ({ day: d, value: signupCounts[d] || 0 }));
+
+  // Popularidad por artista.
+  const byArtist = {};
+  likeRows.forEach((r) => (byArtist[String(r.artistId)] = (byArtist[String(r.artistId)] || 0) + 1));
+  const byName = new Map(docs.map((d) => [String(d.id), d.name]));
+  const topLikes = Object.entries(byArtist)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([id, n]) => ({ id, name: byName.get(id) || id, value: n }));
+
+  // Escuchas por artista (suma de reproducciones).
+  const playsByArtist = {};
+  tasteRows.forEach((r) => (playsByArtist[String(r.artistId)] = (playsByArtist[String(r.artistId)] || 0) + Number(r.plays || 0)));
+  const topPlays = Object.entries(playsByArtist)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([id, n]) => ({ id, name: byName.get(id) || id, value: n }));
+
+  // Géneros del catálogo.
+  const genres = {};
+  docs.forEach((d) => {
+    const g = d.genre && d.genre !== "Desconocido" ? d.genre : "Sin género";
+    genres[g] = (genres[g] || 0) + 1;
+  });
+  const genreDist = Object.entries(genres)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, value]) => ({ name, value }));
+
+  // Planes: cuenta PRO quien tenga el documento; el resto, gratuito.
+  const plans = { free: 0, pro: 0 };
+  subsS.docs.forEach((d) => { if (d.data().plan === "pro") plans.pro++; });
+  plans.pro = Math.min(plans.pro, users.length);
+  plans.free = Math.max(0, users.length - plans.pro);
+
+  // Últimos "Me gusta" con el nombre de quien los hizo.
+  const recentLikes = likeRows
+    .filter((r) => r.createdAt)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 8);
+  const recentUids = [...new Set(recentLikes.map((r) => String(r.uid)))].slice(0, 30);
+  const nameMap = new Map();
+  if (recentUids.length) {
+    try {
+      const r = await getAuth().getUsers(recentUids.map((x) => ({ uid: x })));
+      (r.users || []).forEach((u) => nameMap.set(u.uid, u.displayName || String(u.email || "").split("@")[0]));
+    } catch (_) {}
+  }
+
+  const admins = await Promise.all(users.slice(0, 300).map((u) => getUserRole(u.uid)));
+
+  return {
+    ok: true,
+    kpis: {
+      users: users.length,
+      admins: admins.filter((r) => r === "admin").length,
+      pro: plans.pro,
+      free: plans.free,
+      artists: docs.length,
+      likes: likesS.size,
+      songLikes: songS.size,
+      ratings: ratS.size,
+      plays: tasteRows.reduce((n, r) => n + Number(r.plays || 0), 0),
+      playlists: (await db.collection(PLAYLISTS_COL).count().get()).data().count,
+      friendships: (await db.collection(FRIENDS_COL).count().get()).data().count,
+      tickets: tkS.data().count,
+      ticketsOpen: tkOpenS.data().count,
+      feeds: (await db.collection(FEEDS_COL).count().get()).data().count,
+    },
+    series: { signups, likes14: seriesByDay(likeRows, "createdAt", days14), songLikes14: seriesByDay(songRows, "createdAt", days14) },
+    plans,
+    topLikes,
+    topPlays,
+    genreDist,
+    recentLikes: recentLikes.map((r) => ({
+      artist: r.name || byName.get(String(r.artistId)) || String(r.artistId),
+      genre: r.genre || "",
+      user: nameMap.get(String(r.uid)) || String(r.uid).slice(0, 8),
+      at: r.createdAt,
+    })),
+  };
+}
+
+app.get("/api/admin/analytics", async (req, res) => {
+  try {
+    if (!firestoreReady) return res.status(503).json({ ok: false, error: "Firestore no disponible." });
+    if (analyticsCache && Date.now() - analyticsAt < 60e3) return res.json(analyticsCache);
+    analyticsCache = await buildAnalytics();
+    analyticsAt = Date.now();
+    res.json(analyticsCache);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

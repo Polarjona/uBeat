@@ -256,6 +256,19 @@
     }
 
     // ---- Usuarios ----
+    // Rol/plan reales desde el backend: el menú de usuario los usa para
+    // mostrar la entrada al panel de administración.
+    async function refreshIdentity() {
+      try {
+        const m = await model.me();
+        if (m && m.role) {
+          setState((s) =>
+            s.user ? { ...s, user: { ...s.user, role: m.role, plan: m.plan || s.plan } } : s
+          );
+        }
+      } catch (_) {}
+    }
+
     async function restoreSession() {
       // Firebase avisa solo de los cambios (incluido el arranque).
       model.onSession(async (user, likeIds, songLikeIds) => {
@@ -264,6 +277,7 @@
           return;
         }
         setState((s) => ({ ...s, user }));
+        refreshIdentity();
         if (likeIds && songLikeIds) {
           setState((s) => ({ ...s, likeIds, songLikeIds }));
         }
@@ -297,6 +311,7 @@
           authModal: false,
           authMode: "login",
         }));
+        refreshIdentity();
         loadForYou();
         loadSocial();
         loadActivity();
@@ -323,6 +338,7 @@
         authModal: false,
         authMode: "login",
       }));
+      refreshIdentity();
       loadForYou();
       loadSocial();
       loadActivity();

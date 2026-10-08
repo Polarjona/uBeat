@@ -134,8 +134,20 @@
     },
 
     async me() {
-      const u = window.fbAuth && window.fbAuth.currentUser;
-      return mapUser(u);
+      try {
+        const res = await fetch("/api/me", { headers: await this.authHeaders() });
+        const data = await handle(res);
+        if (data && data.user) {
+          return {
+            id: data.user.id,
+            name: data.user.name || "",
+            email: data.user.email || "",
+            role: data.role || "user",
+            plan: data.plan || "free",
+          };
+        }
+      } catch (_) {}
+      return mapUser(window.fbAuth && window.fbAuth.currentUser);
     },
 
     // Recupera la sesión al arrancar (también tras recargar la página).

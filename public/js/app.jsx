@@ -380,6 +380,17 @@ function App() {
                     <br />
                     {state.user.email}
                   </p>
+                  {state.user.role === "admin" ? (
+                    <button
+                      className="btn ghost clear-btn"
+                      type="button"
+                      onClick={() => {
+                        window.location.href = "/admin";
+                      }}
+                    >
+                      Panel de administración
+                    </button>
+                  ) : null}
                   <button
                     className="btn ghost clear-btn"
                     type="button"
