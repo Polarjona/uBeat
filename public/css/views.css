@@ -601,10 +601,12 @@
 .song-mini-info span { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- Detalle de artista ---------- */
+/* z 95/96: por encima del sidebar fijo (z 90). Si no, los modales se meten
+   bajo el menú, quedan descentrados respecto al área visible y no se ven. */
 .detail-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 95;
   background: rgba(4, 6, 10, 0.72);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -620,7 +622,7 @@
 
 .detail-panel {
   position: fixed;
-  z-index: 85;
+  z-index: 96;
   background: color-mix(in srgb, var(--surface) 97%, transparent);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -1756,7 +1758,8 @@
   color: var(--muted);
 }
 
-/* Tarjeta de perfil: centrada y acotada al viewport (sin coords heredadas del detalle) */
+/* Tarjeta de perfil: centrada y acotada al viewport (sin coords heredadas
+   del detalle; hereda el z 95/96 del detalle para quedar sobre el sidebar). */
 .profile-panel {
   left: 50%;
   top: 50%;
