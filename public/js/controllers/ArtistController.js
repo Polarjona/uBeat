@@ -118,13 +118,109 @@
 
     // ---- Navegación ----
     function go(view) {
-      setState((s) => ({ ...s, view, drawer: false }));
+      setState((s) => ({ ...s, view, sideOpen: false }));
       if (view === "favorites") loadFavorites();
       if (view === "favSongs") {
         loadSongFavorites();
         loadPlaylists();
       }
       if (view === "playlists") loadPlaylists();
+      if (view === "support") loadTickets();
+      if (view === "discover") {
+        // El feed tiene su propio audio: cierra la barra para no solapar sonido.
+        if (getState().barQueue.length) closeBar();
+        // Solo plan PRO: sin él, la vista muestra el paywall (PlanGate).
+        if (getState().plan === "pro" && !getState().discover.length) loadDiscover(true);
+      }
+    }
+
+    // ---- Plan de suscripción ----
+    async function loadPlan() {
+      try {
+        const plan = await model.plan();
+        setState((s) => ({ ...s, plan }));
+        return plan;
+      } catch (_) {
+        setState((s) => ({ ...s, plan: "free" }));
+        return "free";
+      }
+    }
+
+    async function upgradePlan() {
+      setState((s) => ({ ...s, savingPlan: true, planError: "" }));
+      try {
+        const plan = await model.upgradePlan();
+        setState((s) => ({ ...s, plan, savingPlan: false, planModal: false }));
+        // Con PRO ya se pueden cargar las secciones que antes estaban cortadas.
+        loadForYou();
+        loadSocial();
+        loadActivity();
+        return true;
+      } catch (err) {
+        setState((s) => ({ ...s, savingPlan: false, planError: err.message }));
+        return false;
+      }
+    }
+
+    async function cancelPlan() {
+      setState((s) => ({ ...s, savingPlan: true, planError: "" }));
+      try {
+        const plan = await model.cancelPlan();
+        setState((s) => ({ ...s, plan, savingPlan: false, forYou: [], friends: [], pendingIn: [], pendingOut: [], activity: [] }));
+        return true;
+      } catch (err) {
+        setState((s) => ({ ...s, savingPlan: false, planError: err.message }));
+        return false;
+      }
+    }
+
+    // ---- Soporte ----
+    async function loadTickets() {
+      if (!getState().user) {
+        setState((s) => ({ ...s, tickets: [], loadingTickets: false, ticketsError: "" }));
+        return;
+      }
+      setState((s) => ({ ...s, loadingTickets: true, ticketsError: "" }));
+      try {
+        const tickets = await model.myTickets();
+        setState((s) => ({ ...s, tickets, loadingTickets: false }));
+      } catch (err) {
+        setState((s) => ({ ...s, loadingTickets: false, ticketsError: err.message }));
+      }
+    }
+
+    async function sendTicket({ subject, message, email }) {
+      setState((s) => ({ ...s, sendingTicket: true, ticketError: "", ticketSent: "" }));
+      try {
+        const r = await model.sendTicket(subject, message, email || "");
+        setState((s) => ({ ...s, sendingTicket: false, ticketSent: r.id || "ok" }));
+        loadTickets();
+        return true;
+      } catch (err) {
+        setState((s) => ({ ...s, sendingTicket: false, ticketError: err.message }));
+        return false;
+      }
+    }
+
+    async function askSupport(question) {
+      const text = String(question || "").trim();
+      if (!text) return;
+      setState((s) => ({
+        ...s,
+        aiMessages: [...s.aiMessages, { role: "user", text }],
+        aiLoading: true,
+        aiError: "",
+      }));
+      try {
+        const r = await model.askSupport(text);
+        setState((s) => ({
+          ...s,
+          aiLoading: false,
+          aiMessages: [...s.aiMessages, { role: "bot", text: r.answer, suggestions: r.suggestions || [] }],
+        }));
+      } catch (err) {
+        setState((s) => ({ ...s, aiLoading: false, aiError: err.message }));
+      }
     }
 
     // ---- Usuarios ----
@@ -132,16 +228,22 @@
       // Firebase avisa solo de los cambios (incluido el arranque).
       model.onSession(async (user, likeIds, songLikeIds) => {
         if (!user) {
-          setState((s) => ({ ...s, user: null, likeIds: [], songLikeIds: [], forYou: [], friends: [], pendingIn: [], pendingOut: [], activity: [] }));
+          setState((s) => ({ ...s, user: null, plan: "free", likeIds: [], songLikeIds: [], forYou: [], friends: [], pendingIn: [], pendingOut: [], activity: [] }));
           return;
         }
         setState((s) => ({ ...s, user }));
         if (likeIds && songLikeIds) {
           setState((s) => ({ ...s, likeIds, songLikeIds }));
         }
-        loadForYou();
-        loadSocial();
-        loadActivity();
+        // El plan decide qué se puede cargar: primero lo consultamos para
+        // no disparar peticiones que devolverían 403.
+        const plan = await loadPlan();
+        loadRatings();
+        if (plan === "pro") {
+          loadForYou();
+          loadSocial();
+          loadActivity();
+        }
       });
     }
 
@@ -166,6 +268,7 @@
         loadForYou();
         loadSocial();
         loadActivity();
+        loadRatings();
       } catch (err) {
         setState((s) => ({ ...s, authLoading: false, authError: err.message }));
       }
@@ -185,40 +288,123 @@
           likeIds: ids,
           songLikeIds: songIds,
           authLoading: false,
-          authModal: false,
-          authMode: "login",
-        }));
-        loadForYou();
-        loadSocial();
-        loadActivity();
-      } catch (err) {
-        setState((s) => ({ ...s, authLoading: false, authError: err.message }));
-      }
+        authModal: false,
+        authMode: "login",
+      }));
+      loadForYou();
+      loadSocial();
+      loadActivity();
+      loadRatings();
+    } catch (err) {
+      setState((s) => ({ ...s, authLoading: false, authError: err.message }));
     }
+  }
 
-    async function logout() {
-      await model.logout();
+  async function logout() {
+    await model.logout();
+    setState((s) => ({
+      ...s,
+      user: null,
+      likeIds: [],
+      favorites: [],
+      songLikeIds: [],
+      songFavorites: [],
+      playlists: [],
+      openPlaylist: null,
+      barQueue: [],
+      barIdx: 0,
+      barPlaying: false,
+      barFromDiscover: false,
+      forYou: [],
+      friends: [],
+      pendingIn: [],
+      pendingOut: [],
+      activity: [],
+      friendProfile: null,
+      profileCard: false,
+      ratings: {},
+      view: "home",
+    }));
+  }
+
+  // ---- Notas de artistas (0-10) ----
+  async function loadRatings() {
+    try {
+      const ratings = await model.myRatings();
+      setState((s) => ({ ...s, ratings }));
+    } catch (_) {}
+  }
+
+  async function setRating(artistId, score) {
+    const { user } = getState();
+    if (!user) {
       setState((s) => ({
         ...s,
-        user: null,
-        likeIds: [],
-        favorites: [],
-        songLikeIds: [],
-        songFavorites: [],
-        playlists: [],
-        openPlaylist: null,
-        barQueue: [],
-        barIdx: 0,
-        barPlaying: false,
-        forYou: [],
-        friends: [],
-        pendingIn: [],
-        pendingOut: [],
-        activity: [],
-        friendProfile: null,
-        view: "home",
+        authModal: true,
+        authError: "Inicia sesión para puntuar.",
       }));
+      return;
     }
+    try {
+      const saved = await model.setRating(artistId, score);
+      setState((s) => {
+        const ratings = { ...s.ratings };
+        if (saved === null || saved === undefined) delete ratings[String(artistId)];
+        else ratings[String(artistId)] = saved;
+        return { ...s, ratings };
+      });
+    } catch (_) {}
+  }
+
+  // ---- Descubrir (feed infinito de canciones) ----
+  async function loadDiscover(reset) {
+    const s = getState();
+    if (s.discoverLoading) return;
+    if (!reset && !s.discoverHasMore) return;
+    setState((x) => ({ ...x, discoverLoading: true, discoverError: "" }));
+    try {
+      const page = await model.discover(reset ? 0 : s.discoverOffset);
+      setState((x) => {
+        const seen = new Set((reset ? [] : x.discover).map((t) => String(t.trackId)));
+        const fresh = page.songs.filter((t) => !seen.has(String(t.trackId)));
+        return {
+          ...x,
+          discover: reset ? page.songs : [...x.discover, ...fresh],
+          discoverOffset: page.offset,
+          discoverHasMore: page.hasMore,
+          discoverLoading: false,
+          barQueue:
+            x.barFromDiscover && !reset ? [...x.barQueue, ...fresh] : x.barQueue,
+        };
+      });
+    } catch (err) {
+      setState((x) => ({ ...x, discoverLoading: false, discoverError: err.message }));
+    }
+  }
+
+  function playDiscover(i) {
+    const s = getState();
+    if (!s.discover.length) return;
+    setState((x) => ({
+      ...x,
+      barQueue: s.discover,
+      barIdx: Math.max(0, Math.min(i, s.discover.length - 1)),
+      barPlaying: true,
+      barClosing: false,
+      barFromDiscover: true,
+    }));
+  }
+
+  // ---- Perfil como card (no cambia de vista) ----
+  function closeProfileCard() {
+    setState((s) => ({
+      ...s,
+      profileCard: false,
+      friendProfile: null,
+      loadingProfile: false,
+      profileError: "",
+    }));
+  }
 
     // ---- Me gusta ----
     async function toggleLike(artistId) {
@@ -321,7 +507,7 @@
         const code = q.get("oobCode") || "";
         if (q.get("mode") !== "resetPassword" || !code) return;
         window.history.replaceState({}, "", window.location.pathname);
-        setState((s) => ({ ...s, entered: true, resetOob: code, resetLoading: true }));
+        setState((s) => ({ ...s, resetOob: code, resetLoading: true }));
         const email = await window.fbAuth.verifyPasswordResetCode(code);
         setState((s) => ({ ...s, resetEmail: email || "", resetLoading: false }));
       } catch (err) {
@@ -442,6 +628,7 @@
         barIdx: idx || 0,
         barPlaying: true,
         barClosing: false,
+        barFromDiscover: false,
       }));
     }
 
@@ -452,10 +639,23 @@
     }
 
     function barStep(dir) {
-      const { barQueue, barIdx } = getState();
+      const s = getState();
+      const { barQueue, barIdx } = s;
       if (!barQueue.length) return;
-      setState((s) => ({
-        ...s,
+      const next = barIdx + dir;
+      if (dir > 0 && next >= barQueue.length && s.barFromDiscover && s.discoverHasMore && !s.discoverLoading) {
+        loadDiscover().then(() => {
+          const st = getState();
+          setState((x) => ({
+            ...x,
+            barIdx: st.barQueue.length > s.barIdx + 1 ? s.barIdx + 1 : 0,
+            barPlaying: true,
+          }));
+        });
+        return;
+      }
+      setState((st) => ({
+        ...st,
         barIdx: (barIdx + dir + barQueue.length) % barQueue.length,
         barPlaying: true,
       }));
@@ -475,6 +675,7 @@
             barIdx: 0,
             barPlaying: false,
             barClosing: false,
+            barFromDiscover: false,
           })),
         380
       );
@@ -550,10 +751,10 @@
       setState((s) => ({ ...s, cookies: null, cookiesDismissed: false }));
     }
 
-    // ---- Para ti (ponderado) ----
+    // ---- Para ti (ponderado, solo plan PRO) ----
     async function loadForYou() {
-      const { user } = getState();
-      if (!user) {
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") {
         setState((s) => ({ ...s, forYou: [] }));
         return;
       }
@@ -566,21 +767,28 @@
       }
     }
 
-    // Se llama al empezar cada tema (una vez por pista, no por pausa).
+    // Se llama al empezar cada tema. La escucha solo cuenta si el usuario
+    // aguanta >= 5 s: si cambia de canción (p. ej. al hacer scroll en
+    // Descubrir) antes, se cancela el temporizador y no se suma.
+    let playLogTimer = null;
     async function trackStarted(info) {
-      const { user } = getState();
-      if (!user) return;
-      try {
-        await model.logPlay(info);
-        const list = await model.forYou();
-        setState((s) => ({ ...s, forYou: list }));
-      } catch (_) {}
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") return;
+      if (playLogTimer) clearTimeout(playLogTimer);
+      playLogTimer = setTimeout(async () => {
+        playLogTimer = null;
+        try {
+          await model.logPlay(info);
+          const list = await model.forYou();
+          setState((s) => ({ ...s, forYou: list }));
+        } catch (_) {}
+      }, 5000);
     }
 
     // ---- Social ----
     async function loadSocial() {
-      const { user } = getState();
-      if (!user) {
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") {
         setState((s) => ({ ...s, friends: [], pendingIn: [], pendingOut: [] }));
         return;
       }
@@ -626,7 +834,7 @@
     }
 
     async function openFriend(uid) {
-      setState((s) => ({ ...s, view: "friendProfile", drawer: false, loadingProfile: true, profileError: "", friendProfile: null }));
+      setState((s) => ({ ...s, sideOpen: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
       try {
         const p = await model.friendProfile(uid);
         setState((s) => ({ ...s, friendProfile: p, loadingProfile: false }));
@@ -638,7 +846,7 @@
     async function openMyProfile() {
       const { user } = getState();
       if (!user) return;
-      setState((s) => ({ ...s, view: "friendProfile", drawer: false, loadingProfile: true, profileError: "", friendProfile: null }));
+      setState((s) => ({ ...s, sideOpen: false, profileCard: true, loadingProfile: true, profileError: "", friendProfile: null }));
       try {
         await Promise.all([loadFavorites(), loadSongFavorites()]);
         const p = await model.friendProfile(user.id);
@@ -649,8 +857,8 @@
     }
 
     async function loadActivity() {
-      const { user } = getState();
-      if (!user) {
+      const { user, plan } = getState();
+      if (!user || plan !== "pro") {
         setState((s) => ({ ...s, activity: [] }));
         return;
       }
@@ -661,14 +869,6 @@
       } catch (_) {
         setState((s) => ({ ...s, loadingActivity: false, activity: [] }));
       }
-    }
-
-    // ---- Transición de la portada ----
-    function enter() {
-      const { entered, leaving } = getState();
-      if (entered || leaving) return;
-      setState((s) => ({ ...s, leaving: true }));
-      setTimeout(() => setState((s) => ({ ...s, entered: true })), 750);
     }
 
     // ---- Reproductor ----
@@ -719,7 +919,6 @@
       setFilter,
       clearFilters,
       search,
-      enter,
       go,
       restoreSession,
       login,
@@ -738,7 +937,18 @@
       loadFavorites,
       toggleSongLike,
       loadSongFavorites,
+      loadRatings,
+      setRating,
+      loadDiscover,
+      playDiscover,
+      closeProfileCard,
       loadForYou,
+      loadPlan,
+      upgradePlan,
+      cancelPlan,
+      loadTickets,
+      sendTicket,
+      askSupport,
       trackStarted,
       loadSocial,
       sendFriendRequest,

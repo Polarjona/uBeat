@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistDetail, Loader, Landing, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistChart, ArtistDetail, Loader, Hero, SkeletonGrid, SkeletonChart, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView, SupportFab } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -20,7 +20,6 @@ function App() {
     showFilters: false,
     showUser: false,
     view: "home",
-    drawer: false,
     authModal: false,
     authMode: "login",
     authLoading: false,
@@ -65,8 +64,29 @@ function App() {
     friendProfile: null,
     loadingProfile: false,
     profileError: "",
-    entered: false,
-    leaving: false,
+    profileCard: false,
+    ratings: {},
+    plan: "free",
+    planModal: false,
+    savingPlan: false,
+    planError: "",
+    tickets: [],
+    loadingTickets: false,
+    ticketsError: "",
+    sendingTicket: false,
+    ticketSent: "",
+    ticketError: "",
+    aiMessages: [],
+    aiLoading: false,
+    aiError: "",
+    discover: [],
+    discoverOffset: 0,
+    discoverHasMore: true,
+    discoverLoading: false,
+    discoverError: "",
+    barFromDiscover: false,
+    pageColor: "",
+    sideOpen: false,
     detail: null,
     detailClosing: false,
     previewTracks: [],
@@ -120,9 +140,28 @@ function App() {
     );
     ob.observe(el);
     return () => ob.disconnect();
-  }, [state.view, state.entered, state.country, state.genre, state.query]);
+  }, [state.view, state.country, state.genre, state.query]);
 
   const setQuery = (v) => setState((s) => ({ ...s, query: v }));
+
+  // Atajo de teclado: "/" enfoca el buscador (si no se está escribiendo ya).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = document.activeElement;
+      const tag = t && t.tagName ? t.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea" || tag === "select" || (t && t.isContentEditable))
+        return;
+      const input = document.getElementById("global-search");
+      if (input) {
+        e.preventDefault();
+        input.focus();
+        if (input.select) input.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Tema claro / oscuro con persistencia.
   useEffect(() => {
@@ -140,7 +179,15 @@ function App() {
         applyAccent(a);
       }
     } catch (_) {}
-    setState((s) => ({ ...s, theme: t, accent: a }));
+    let pc = "";
+    try {
+      const saved = localStorage.getItem("aa_page");
+      if (/^#[0-9a-fA-F]{6}$/.test(saved || "")) {
+        pc = saved;
+        applyPageColor(pc);
+      }
+    } catch (_) {}
+    setState((s) => ({ ...s, theme: t, accent: a, pageColor: pc }));
   }, []);
 
   const toggleTheme = () =>
@@ -150,7 +197,18 @@ function App() {
         localStorage.setItem("aa_theme", t);
       } catch (_) {}
       document.documentElement.dataset.theme = t;
-      return { ...s, theme: t };
+      // Un color de página personalizado escribe --bg/--surface/--text como
+      // estilos inline en <html> y pisa el bloque del tema: sin quitarlo, el
+      // cambio de claro/oscuro no se ve. Al cambiar de tema manda el tema.
+      let pageColor = s.pageColor;
+      if (pageColor) {
+        try {
+          localStorage.removeItem("aa_page");
+        } catch (_) {}
+        applyPageColor("");
+        pageColor = "";
+      }
+      return { ...s, theme: t, pageColor };
     });
 
   // Color de acento personalizable con persistencia.
@@ -201,6 +259,58 @@ function App() {
     root.removeProperty("--accent-ink");
     setState((s) => ({ ...s, accent: "#7c6cf0" }));
   };
+
+  // Color de página (fondo general, independiente del acento).
+  const mixHex = (hex, target, pct) => {
+    const p = (h) => {
+      const n = h.replace("#", "");
+      const v = parseInt(n.length === 3 ? n.split("").map((c) => c + c).join("") : n, 16);
+      return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    };
+    const a = p(hex);
+    const b = p(target);
+    return (
+      "#" +
+      a
+        .map((v, i) => Math.round(v + (b[i] - v) * pct))
+        .map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0"))
+        .join("")
+    );
+  };
+
+  const applyPageColor = (hex) => {
+    const root = document.documentElement.style;
+    const props = ["--bg", "--surface", "--surface-2", "--line", "--text", "--muted", "--scroll"];
+    if (!hex) {
+      props.forEach((p) => root.removeProperty(p));
+      return;
+    }
+    const light = isLightHex(hex);
+    root.setProperty("--bg", hex);
+    root.setProperty("--surface", light ? mixHex(hex, "#ffffff", 0.55) : mixHex(hex, "#ffffff", 0.06));
+    root.setProperty("--surface-2", light ? mixHex(hex, "#ffffff", 0.85) : mixHex(hex, "#ffffff", 0.11));
+    root.setProperty("--line", light ? mixHex(hex, "#000000", 0.14) : mixHex(hex, "#ffffff", 0.16));
+    root.setProperty("--text", light ? "#16191f" : "#e6e9ee");
+    root.setProperty("--muted", light ? "#5d6672" : "#8b949e");
+    root.setProperty("--scroll", light ? "#b9c0c9" : "#3a4358");
+  };
+
+  const setPageColor = (hex) => {
+    try {
+      localStorage.setItem("aa_page", hex);
+    } catch (_) {}
+    applyPageColor(hex);
+    setState((s) => ({ ...s, pageColor: hex }));
+  };
+
+  const resetPageColor = () => {
+    try {
+      localStorage.removeItem("aa_page");
+    } catch (_) {}
+    applyPageColor("");
+    setState((s) => ({ ...s, pageColor: "" }));
+  };
+
   const toggleFilters = () =>
     setState((s) => ({ ...s, showFilters: !s.showFilters, showUser: false }));
 
@@ -248,38 +358,23 @@ function App() {
 
   return (
     <React.Fragment>
+      <div className="content">
       <header className="topbar">
         <div className="topbar-inner">
           <button
-            className="icon-btn"
+            className="icon-btn hamburger"
             type="button"
             aria-label="Abrir menú"
-            onClick={() => setState((s) => ({ ...s, drawer: true }))}
+            onClick={() => setState((s) => ({ ...s, sideOpen: true }))}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4zM4 11h16v2H4zM4 16h16v2H4z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" /></svg>
           </button>
-          <div
-            className="logo clickable"
-            onClick={() => {
-              ctrlRef.current.clearFilters();
-              ctrlRef.current.go("home");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            title="Ir al inicio"
-          >
-            <span className="disc">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" /></svg>
-            </span>
-            <span>
-              uBeat
-              <small>{state.total > 0 ? `${state.total} artistas` : "Catálogo de artistas"}</small>
-            </span>
-          </div>
           <SearchBar
             value={state.query}
             onChange={setQuery}
             onSearch={() => ctrlRef.current.search()}
             loading={state.loading}
+            onPick={(a, r) => openDetail(a, r)}
           />
           {state.user ? (
             <div className="filters-wrap">
@@ -369,12 +464,64 @@ function App() {
             }}
             onAccent={(c) => setAccent(c)}
             onResetAccent={() => resetAccent()}
+            pageColor={state.pageColor}
+            onPageColor={(c) => setPageColor(c)}
+            onPageColorReset={() => resetPageColor()}
             cookies={state.cookies}
             onOpenCookies={() => ctrlRef.current.reopenCookies()}
             user={state.user}
             onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
             onLogout={() => ctrlRef.current.logout()}
+            plan={state.plan}
+            planModal={state.planModal}
+            savingPlan={state.savingPlan}
+            planError={state.planError}
+            onShowCheckout={() => setState((s) => ({ ...s, planModal: true, planError: "" }))}
+            onHideCheckout={() => setState((s) => ({ ...s, planModal: false, planError: "" }))}
+            onUpgrade={() => ctrlRef.current.upgradePlan()}
+            onCancel={() => {
+              if (window.confirm("¿Cancelar tu suscripción PRO? Volverás al plan gratuito (sin Social ni Descubrir)."))
+                ctrlRef.current.cancelPlan();
+            }}
           />
+        ) : state.view === "support" ? (
+          <SupportView
+            user={state.user}
+            aiMessages={state.aiMessages}
+            aiLoading={state.aiLoading}
+            aiError={state.aiError}
+            tickets={state.tickets}
+            loadingTickets={state.loadingTickets}
+            ticketsError={state.ticketsError}
+            sendingTicket={state.sendingTicket}
+            ticketSent={state.ticketSent}
+            ticketError={state.ticketError}
+            onAsk={(q) => ctrlRef.current.askSupport(q)}
+            onSendTicket={(t) => ctrlRef.current.sendTicket(t)}
+            onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
+          />
+        ) : state.view === "discover" ? (
+          state.plan === "pro" ? (
+          <DiscoverView
+            songs={state.discover}
+            loading={state.discoverLoading}
+            error={state.discoverError}
+            hasMore={state.discoverHasMore}
+            onLoadMore={() => ctrlRef.current.loadDiscover()}
+            onRetry={() => ctrlRef.current.loadDiscover(true)}
+            likeIds={state.songLikeIds}
+            onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
+            onOpenArtist={openDetail}
+            onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
+            paused={!!(state.detail || state.profileCard || state.authModal)}
+          />
+          ) : (
+          <PlanGate
+            user={state.user}
+            onLogin={() => setState((s) => ({ ...s, authModal: true, authMode: "login", authError: "" }))}
+            onSettings={() => ctrlRef.current.go("settings")}
+          />
+          )
         ) : state.view === "playlists" ? (
           <section>
             <h2 className="section-title">Playlists</h2>
@@ -501,20 +648,6 @@ function App() {
               />
             )}
           </section>
-        ) : state.view === "friendProfile" ? (
-          <FriendProfile
-            profile={state.friendProfile}
-            loading={state.loadingProfile}
-            error={state.profileError}
-            onOpenArtist={openDetail}
-            onPlaySongs={(list, i) => ctrlRef.current.playSongs(list, i)}
-            currentId={state.barQueue[state.barIdx] && state.barQueue[state.barIdx].trackId}
-            playing={state.barPlaying}
-            likeIds={state.songLikeIds}
-            onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
-            own={!!(state.friendProfile && state.friendProfile.own)}
-            onGoSettings={() => ctrlRef.current.go("settings")}
-          />
         ) : state.view === "favorites" ? (
           <section>
             <h2 className="section-title">Mis artistas favoritos</h2>
@@ -548,6 +681,7 @@ function App() {
           <React.Fragment>
             {showRails ? (
               <React.Fragment>
+                <Hero artists={state.chartsSpain.length ? state.chartsSpain : state.artists} />
                 {state.user && (state.forYou.length > 0 || state.loadingForYou) ? (
                   <Rail
                     title="Para ti"
@@ -605,14 +739,24 @@ function App() {
               ) : null}
             </div>
 
-            {showRails ? <h2 className="section-title">Todos los artistas</h2> : null}
+            {showRails ? (
+              <div className="catalog-head">
+                <div>
+                  <p className="detail-eyebrow">Catálogo completo</p>
+                  <h2 className="section-title">Todos los artistas</h2>
+                </div>
+                <span className="catalog-count">
+                  {state.total > 0 ? `${state.total} en total` : ""}
+                </span>
+              </div>
+            ) : null}
 
             {state.error ? <div className="error">{state.error}</div> : null}
             <div className="todos-scroll" ref={todosRef}>
               {state.loading && state.artists.length === 0 ? (
-                <Loader />
+                <SkeletonChart n={8} />
               ) : (
-                <ArtistGrid artists={state.artists} onSelect={openDetail} />
+                <ArtistChart artists={state.artists} onSelect={openDetail} />
               )}
               {state.loading && state.artists.length > 0 ? <Loader /> : null}
               <div ref={sentinelRef} className="sentinel" />
@@ -625,8 +769,9 @@ function App() {
       </main>
 
       <Footer onCookies={() => ctrlRef.current.reopenCookies()} />
+      </div>
 
-      {state.entered && !state.cookies && !state.cookiesDismissed ? (
+      {!state.cookies && !state.cookiesDismissed ? (
         <CookieBanner
           onAcceptAll={() => ctrlRef.current.acceptCookies()}
           onSave={(d) => ctrlRef.current.saveCookiePrefs(d)}
@@ -635,18 +780,22 @@ function App() {
       ) : null}
 
       <SideMenu
-        open={state.drawer}
+        open={state.sideOpen}
         view={state.view}
         user={state.user}
+        plan={state.plan}
         favCount={state.likeIds.length}
         songFavCount={state.songLikeIds.length}
         plCount={state.playlists.length}
-        onGo={(v) => ctrlRef.current.go(v)}
-        onClose={() => setState((s) => ({ ...s, drawer: false }))}
-        onUsers={() => setState((s) => ({ ...s, drawer: false, authModal: true, authError: "" }))}
+        onGo={(v) => {
+          ctrlRef.current.go(v);
+          setState((s) => ({ ...s, sideOpen: false }));
+        }}
+        onClose={() => setState((s) => ({ ...s, sideOpen: false }))}
+        onUsers={() => setState((s) => ({ ...s, sideOpen: false, authModal: true, authError: "" }))}
         onLogout={() => {
           ctrlRef.current.logout();
-          setState((s) => ({ ...s, drawer: false }));
+          setState((s) => ({ ...s, sideOpen: false }));
         }}
         onOpenMyProfile={() => ctrlRef.current.openMyProfile()}
         onGoSettings={() => ctrlRef.current.go("settings")}
@@ -676,6 +825,26 @@ function App() {
         />
       ) : null}
 
+      {state.profileCard ? (
+        <ProfileCard
+          loading={state.loadingProfile}
+          error={state.profileError}
+          profile={state.friendProfile}
+          onClose={() => ctrlRef.current.closeProfileCard()}
+          onOpenArtist={openDetail}
+          onPlaySongs={(list, i) => ctrlRef.current.playSongs(list, i)}
+          currentId={state.barQueue[state.barIdx] && state.barQueue[state.barIdx].trackId}
+          playing={state.barPlaying}
+          likeIds={state.songLikeIds}
+          onToggleLike={(sg) => ctrlRef.current.toggleSongLike(sg)}
+          own={!!(state.friendProfile && state.friendProfile.own)}
+          onGoSettings={() => {
+            ctrlRef.current.closeProfileCard();
+            ctrlRef.current.go("settings");
+          }}
+        />
+      ) : null}
+
       {state.detail ? (
         <ArtistDetail
           artist={state.detail.artist}
@@ -695,6 +864,12 @@ function App() {
           songLikeIds={state.songLikeIds}
           onToggleSong={(t) => ctrlRef.current.toggleSongLike(t)}
           onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
+          rating={
+            state.ratings[String(state.detail.artist.id)] === undefined
+              ? null
+              : state.ratings[String(state.detail.artist.id)]
+          }
+          onRate={(n) => ctrlRef.current.setRating(state.detail.artist.id, n)}
         />
       ) : null}
 
@@ -716,11 +891,13 @@ function App() {
         />
       ) : null}
 
-      {!state.entered ? (
-        <Landing
-          artists={state.artists}
-          leaving={state.leaving}
-          onEnter={() => ctrlRef.current.enter()}
+      {state.view !== "support" && state.view !== "discover" ? (
+        <SupportFab
+          messages={state.aiMessages}
+          loading={state.aiLoading}
+          error={state.aiError}
+          onAsk={(q) => ctrlRef.current.askSupport(q)}
+          raised={state.barQueue.length > 0}
         />
       ) : null}
     </React.Fragment>

@@ -2,12 +2,12 @@
 // La apiKey es pública por diseño (solo identifica el proyecto;
 // las reglas las aplica Firebase + nuestro backend verifica el token).
 var firebaseConfig = {
-  apiKey: "AIzaSyBaqmO-S7XmvXxmlKY_8rc-NDJeJbMYMXg",
-  authDomain: "ubeat-genai.firebaseapp.com",
-  projectId: "ubeat-genai",
-  storageBucket: "ubeat-genai.firebasestorage.app",
-  messagingSenderId: "1037066735481",
-  appId: "1:1037066735481:web:497c9f26f4c2635b1069a8"
+  apiKey: "AIzaSyCAS9hQFOE5A5dyfdjbYWH4JnLbkDkunZY",
+  authDomain: "ubeat-v4.firebaseapp.com",
+  projectId: "ubeat-v4",
+  storageBucket: "ubeat-v4.firebasestorage.app",
+  messagingSenderId: "773180087517",
+  appId: "1:773180087517:web:b59f26a85c9a779b7fcf34"
 };
 
 firebase.initializeApp(firebaseConfig);
