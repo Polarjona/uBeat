@@ -21,12 +21,21 @@
     return data;
   }
 
+  function norm(s) {
+    return (s || "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
   function clean(list) {
     return (list || []).map((a) => ({
       id: String(a.id ?? a.name ?? Math.random()),
       name: a.name || "Desconocido",
-      genre: a.genre || "Desconocido",
-      country: a.country || "Desconocido",
+      genre: a.genre && norm(a.genre) !== "unknown" ? a.genre : "Desconocido",
+      country: a.country && norm(a.country) !== "unknown" ? a.country : "Desconocido",
       image: a.image || FALLBACK_IMG,
     }));
   }
@@ -190,9 +199,14 @@
     },
 
     async myFavorites() {
-      const res = await fetch("/api/likes", { headers: (await this.authHeaders()) });
-      const data = await handle(res);
-      return clean(data.artists);
+      if (!(window.fbAuth && window.fbAuth.currentUser)) return [];
+      try {
+        const res = await fetch("/api/likes", { headers: (await this.authHeaders()) });
+        const data = await handle(res);
+        return clean(data.artists);
+      } catch (_) {
+        return [];
+      }
     },
 
     // ---- Me gusta en canciones ----
@@ -226,9 +240,14 @@
     },
 
     async mySongFavorites() {
-      const res = await fetch("/api/song-likes", { headers: (await this.authHeaders()) });
-      const data = await handle(res);
-      return data.songs || [];
+      if (!(window.fbAuth && window.fbAuth.currentUser)) return [];
+      try {
+        const res = await fetch("/api/song-likes", { headers: (await this.authHeaders()) });
+        const data = await handle(res);
+        return data.songs || [];
+      } catch (_) {
+        return [];
+      }
     },
 
     // ---- Notas de artistas (0-10) ----

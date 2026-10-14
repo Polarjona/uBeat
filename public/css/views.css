@@ -1174,6 +1174,15 @@
   font-size: 34px;
 }
 
+/* Portada real (600×600): sin esta regla se pintaba a tamaño natural y
+   quedaba recortada/hinchada dentro de la card. */
+.pl-card > img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+
 .pl-card-body { padding: 13px 14px; }
 .pl-card-body strong { display: block; font-size: 14.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-title { margin: 0 0 16px; font-size: 22px; font-weight: 700; }

@@ -243,26 +243,131 @@ async function listAllFirestore() {
   return [...all].sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
 }
 
+// ---------- País en el desplegable de filtros ----------
+// `country` guarda a veces ciudad+país ("Madrid, Spain"), ciudades sueltas
+// ("Limerick"), estados de EE. UU. ("Nashville, Tennessee") o erratas
+// ("Milan, Ital"). Para que el desplegable sea útil se agrupa por NACIÓN y
+// se muestra una etiqueta en español; el filtro compara con la misma función.
+
+const US_STATES = new Set([
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+  "connecticut", "delaware", "district of columbia", "florida", "georgia",
+  "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky",
+  "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota",
+  "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire",
+  "new jersey", "new mexico", "new york", "north carolina", "north dakota",
+  "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island",
+  "south carolina", "south dakota", "tennessee", "tennesse", "texas", "utah",
+  "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming",
+  "al", "ak", "az", "ar", "ca", "co", "ct", "de", "dc", "fl", "ga", "hi",
+  "id", "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn",
+  "ms", "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh",
+  "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa",
+  "wv", "wi", "wy",
+]);
+
+const UK_NATIONS = new Set([
+  "uk", "united kingdom", "great britain", "britain", "gb", "england",
+  "scotland", "wales", "northern ireland",
+]);
+
+// Alias sobre la ÚLTIMA parte del string (ya normalizada con norm()).
+const NATION_ALIAS = {
+  espana: "spain",
+  "ee uu": "usa", "ee. uu": "usa", eeuu: "usa", "estados unidos": "usa",
+  "united states": "usa", "united states of america": "usa",
+  "u s": "usa", us: "usa", "u.s": "usa", "u.s.a": "usa",
+  norteamerica: "usa",
+  "reino unido": "uk",
+  espagne: "spain",
+  alemania: "germany", deutschland: "germany",
+  francia: "france",
+  japon: "japan",
+  italia: "italy", ital: "italy", italian: "italy",
+  "paises bajos": "netherlands", holanda: "netherlands",
+  "corea del sur": "south korea",
+  brasil: "brazil",
+  rusia: "russia",
+  turquia: "turkey",
+  grecia: "greece",
+  suiza: "switzerland",
+  austria: "austria",
+  suecia: "sweden",
+  noruega: "norway",
+  dinamarca: "denmark",
+  finlandia: "finland",
+  polonia: "poland",
+  portugal: "portugal",
+  belgica: "belgium",
+  mexico: "mexico",
+  argentina: "argentina",
+  chile: "chile",
+  colombia: "colombia",
+  venezuela: "venezuela",
+  peru: "peru",
+  // Ciudades/provincias que aparecen solas en los datos: se agrupan a su país
+  // para no ensuciar el desplegable (se compara con la misma función).
+  madrid: "spain", jaen: "spain", berriozar: "spain",
+  london: "uk",
+  limerick: "ireland",
+  quebec: "canada",
+  goias: "brazil",
+};
+
+// Nación comparable a partir del campo `country` del artista (o del valor
+// elegido en el desplegable). Devuelve "" para vacío/Desconocido.
+function nationKey(country) {
+  const clean = String(country || "").replace(/\[\d+\]/g, "").trim();
+  if (!clean || norm(clean) === "desconocido") return "";
+  const parts = norm(clean).split(",").map((s) => s.trim()).filter(Boolean);
+  let last = parts[parts.length - 1] || "";
+  last = last.replace(/\.+$/, "").trim(); // "U.S." -> "U.S" (sin punto final)
+  if (!last) return "";
+  if (US_STATES.has(last)) return "usa";
+  if (UK_NATIONS.has(last)) return "uk";
+  if (NATION_ALIAS[last]) return NATION_ALIAS[last];
+  return last;
+}
+
+// Etiqueta a mostrar en español para una nación/dato country.
+function countryFilterLabel(country) {
+  const key = nationKey(country);
+  if (!key) return norm(country) === "desconocido" ? "Desconocido" : "";
+  if (COUNTRY_LABEL[key]) return COUNTRY_LABEL[key];
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+// Los datos vienen a veces en inglés ("Unknown"); la UI está en español.
+// Ojo: vacío debe seguir siendo vacío (sin filtrar), no "Desconocido".
+function genreFilterLabel(genre) {
+  if (!genre) return "";
+  if (norm(genre) === "unknown") return "Desconocido";
+  return genre;
+}
+
 // Filtro AND: si se pide país y género, el artista debe cumplir AMBOS.
-// La comparación ignora mayúsculas y acentos.
+// La comparación ignora mayúsculas y acentos y agrupa por nación.
 function applyAndFilter(artists, { country, genre }) {
-  const c = norm(country);
-  const g = norm(genre);
+  const c = norm(countryFilterLabel(country));
+  const g = norm(genreFilterLabel(genre));
   return (artists || []).filter((a) => {
-    if (c && norm(a.country) !== c) return false;
-    if (g && norm(a.genre) !== g) return false;
+    // Un campo vacío en los datos cuenta como "Desconocido".
+    if (c && norm(countryFilterLabel(a.country) || "Desconocido") !== c) return false;
+    if (g && norm(genreFilterLabel(a.genre) || "Desconocido") !== g) return false;
     return true;
   });
 }
 
-// Valores únicos para rellenar el desplegable de filtros.
+// Valores únicos para rellenar el desplegable de filtros (naciones en
+// español, sin duplicados por ciudad).
 async function distinctValues() {
   const docs = await allArtistsDocs();
   const cs = new Set();
   const gs = new Set();
   docs.forEach((v) => {
-    if (v.country) cs.add(v.country);
-    if (v.genre) gs.add(v.genre);
+    const label = countryFilterLabel(v.country);
+    if (label) cs.add(label);
+    if (v.genre) gs.add(genreFilterLabel(v.genre));
   });
   const sortEs = (x, y) => x.localeCompare(y, "es");
   return {
@@ -382,15 +487,21 @@ app.get("/api/artists/count", async (req, res) => {
 app.get("/api/artists/filters", async (req, res) => {
   try {
     if (!firestoreReady) {
+      // Igual que en Firestore: agrupa por NACIÓN (sin ciudades) y etiqueta
+      // en español, para que el desplegable no se llene de ciudades.
       const seed = loadSeed();
-      const uniq = (k) =>
-        [...new Set(seed.map((a) => a[k]).filter(Boolean))].sort((x, y) =>
-          x.localeCompare(y, "es")
-        );
+      const cs = new Set();
+      const gs = new Set();
+      seed.forEach((a) => {
+        const label = countryFilterLabel(a.country);
+        if (label) cs.add(label);
+        if (a.genre) gs.add(genreFilterLabel(a.genre));
+      });
+      const sortEs = (x, y) => x.localeCompare(y, "es");
       return res.json({
         ok: true,
-        countries: uniq("country"),
-        genres: uniq("genre"),
+        countries: [...cs].sort(sortEs),
+        genres: [...gs].sort(sortEs),
         source: "local-seed",
       });
     }
@@ -1819,12 +1930,25 @@ app.get("/api/artists/preview", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Falta ?artist=" });
     const url =
       `https://itunes.apple.com/search?term=${encodeURIComponent(artist)}` +
-      `&entity=song&limit=8&country=ES`;
+      `&entity=song&limit=25&country=ES`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(`iTunes HTTP ${r.status}`);
     const data = await r.json();
+    // iTunes devuelve canciones que solo contienen el nombre del artista en
+    // el título; se descartan las de otros intérpretes para que la lista de
+    // una ficha sea coherente (p. ej. "Shallow" en Queen).
+    const na = norm(artist);
+    const wanted = na.includes(" ") ? na.split(/\s+/) : [na];
+    const matchesArtist = (name) => {
+      const nn = norm(name);
+      if (nn === na || nn.includes(na)) return true;
+      // También acepta variantes con "the"/ft.: "the queen", "queen ft. ..."
+      const tokens = nn.replace(/\b(ft|featuring|feat)\b\.?/g, " ").split(/[\s,]+/).filter(Boolean);
+      return wanted.every((w) => tokens.includes(w));
+    };
     const tracks = (data.results || [])
-      .filter((t) => t.previewUrl)
+      .filter((t) => t.previewUrl && matchesArtist(t.artistName || ""))
+      .slice(0, 8)
       .map((t) => ({
         trackId: t.trackId,
         track: t.trackName || "Sin título",
@@ -2166,6 +2290,25 @@ const COUNTRY_LABEL = {
   japan: "Japón",
   mexico: "México",
   canada: "Canadá",
+  denmark: "Dinamarca",
+  sweden: "Suecia",
+  finland: "Finlandia",
+  norway: "Noruega",
+  "south korea": "Corea del Sur",
+  brazil: "Brasil",
+  russia: "Rusia",
+  turkey: "Turquía",
+  greece: "Grecia",
+  switzerland: "Suiza",
+  austria: "Austria",
+  poland: "Polonia",
+  belgium: "Bélgica",
+  colombia: "Colombia",
+  venezuela: "Venezuela",
+  argentina: "Argentina",
+  chile: "Chile",
+  peru: "Perú",
+  "puerto rico": "Puerto Rico",
 };
 
 function nationOf(country) {

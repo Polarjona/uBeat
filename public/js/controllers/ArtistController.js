@@ -150,7 +150,7 @@
       ) {
         setState((s) => ({ ...s, artists: s.artists.slice(0, PAGE_SIZE), hasMore: true }));
       }
-      setState((s) => ({ ...s, view, sideOpen: false }));
+      setState((s) => ({ ...s, view, sideOpen: false, openPlaylist: null }));
       if (view === "favorites") loadFavorites();
       if (view === "favSongs") {
         loadSongFavorites();
@@ -269,6 +269,17 @@
       } catch (_) {}
     }
 
+    // Tras iniciar/restaurar la sesión se recarga lo que necesita la vista
+    // actual: el contador del menú siempre y los datos de la sección abierta,
+    // para que no quede el aviso "Inicia sesión." ni listas sin cargar.
+    function reloadAfterAuth() {
+      loadPlaylists();
+      const v = getState().view;
+      if (v === "favorites") loadFavorites();
+      if (v === "favSongs") loadSongFavorites();
+      if (v === "support") loadTickets();
+    }
+
     async function restoreSession() {
       // Firebase avisa solo de los cambios (incluido el arranque).
       model.onSession(async (user, likeIds, songLikeIds) => {
@@ -285,6 +296,7 @@
         // no disparar peticiones que devolverían 403.
         const plan = await loadPlan();
         loadRatings();
+        reloadAfterAuth();
         if (plan === "pro") {
           loadForYou();
           loadSocial();
@@ -316,6 +328,7 @@
         loadSocial();
         loadActivity();
         loadRatings();
+        reloadAfterAuth();
       } catch (err) {
         setState((s) => ({ ...s, authLoading: false, authError: err.message }));
       }
@@ -343,6 +356,7 @@
       loadSocial();
       loadActivity();
       loadRatings();
+      reloadAfterAuth();
     } catch (err) {
       setState((s) => ({ ...s, authLoading: false, authError: err.message }));
     }
@@ -482,6 +496,11 @@
     }
 
     async function loadFavorites() {
+      // Sin sesión no se pide nada: evita el 401 de /api/likes en consola.
+      if (!getState().user) {
+        setState((s) => ({ ...s, favorites: [], loadingFav: false, favError: "" }));
+        return;
+      }
       setState((s) => ({ ...s, loadingFav: true, favError: "" }));
       try {
         const favs = await model.myFavorites();
@@ -524,6 +543,11 @@
     }
 
     async function loadSongFavorites() {
+      // Sin sesión no se pide nada: evita el 401 de /api/song-likes en consola.
+      if (!getState().user) {
+        setState((s) => ({ ...s, songFavorites: [], loadingSongs: false, songsError: "" }));
+        return;
+      }
       setState((s) => ({ ...s, loadingSongs: true, songsError: "" }));
       try {
         const songs = await model.mySongFavorites();
@@ -644,9 +668,17 @@
 
     async function addSongToPlaylist(pid, song) {
       await model.addSongToPlaylist(pid, song);
-      // refresca el contador de la playlist
+      // Refresca el contador de la playlist y, si esa está abierta, su lista
+      // de canciones para que el detalle no quede desactualizado.
       const playlists = await model.playlists();
-      setState((s) => ({ ...s, playlists }));
+      setState((s) => ({
+        ...s,
+        playlists,
+        openPlaylist:
+          s.openPlaylist && String(s.openPlaylist.id) === String(pid)
+            ? { ...s.openPlaylist, songs: [...s.openPlaylist.songs, song] }
+            : s.openPlaylist,
+      }));
     }
 
     async function removeSongFromPlaylist(pid, trackId) {

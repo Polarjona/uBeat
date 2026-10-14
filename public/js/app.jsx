@@ -113,6 +113,11 @@ function App() {
     });
   }
 
+  // Contenedores de los dos desplegables del header (menú de usuario y
+  // Filtros): sirven para detectar clics fuera y cerrarlos.
+  const userWrapRef = useRef(null);
+  const filtersWrapRef = useRef(null);
+
   useEffect(() => {
     window.ArtistModel.health().then((h) =>
       setState((s) => ({ ...s, health: h }))
@@ -301,6 +306,25 @@ function App() {
   const toggleFilters = () =>
     setState((s) => ({ ...s, showFilters: !s.showFilters, showUser: false }));
 
+  // Clic fuera del menú de usuario o del panel de Filtros → se cierran.
+  useEffect(() => {
+    if (!state.showFilters && !state.showUser) return undefined;
+    const onDown = (e) => {
+      const inUser = userWrapRef.current && userWrapRef.current.contains(e.target);
+      const inFilters =
+        filtersWrapRef.current && filtersWrapRef.current.contains(e.target);
+      if (!inUser && !inFilters) {
+        setState((s) =>
+          s.showFilters || s.showUser
+            ? { ...s, showFilters: false, showUser: false }
+            : s
+        );
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [state.showFilters, state.showUser]);
+
   const showRails =
     state.view === "home" &&
     !(state.query || "").trim() &&
@@ -364,7 +388,7 @@ function App() {
             onPick={(a, r) => openDetail(a, r)}
           />
           {state.user ? (
-            <div className="filters-wrap">
+            <div className="filters-wrap" ref={userWrapRef}>
               <button
                 className="btn ghost filters-btn user-btn"
                 type="button"
@@ -414,6 +438,7 @@ function App() {
             </button>
           )}
           <FilterDropdown
+            wrapRef={filtersWrapRef}
             countries={state.countries}
             genres={state.genres}
             country={state.country}
@@ -559,6 +584,7 @@ function App() {
                     onRemove={(sg) =>
                       ctrlRef.current.removeSongFromPlaylist(state.openPlaylist.id, sg.trackId)
                     }
+                    emptyMessage="Esta playlist está vacía. Ve a la sección Canciones y usa ⋮ → “Añadir a playlist”."
                   />
                 )}
               </React.Fragment>

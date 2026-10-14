@@ -124,10 +124,11 @@ window.ArtistaViews = (function () {
     onToggle,
     onChange,
     onClear,
+    wrapRef,
   }) {
     const active = (country ? 1 : 0) + (genre ? 1 : 0);
     return (
-      <div className="filters-wrap">
+      <div className="filters-wrap" ref={wrapRef}>
         <button className="btn ghost filters-btn" type="button" onClick={onToggle}>
           Filtros
           {active > 0 ? <span className="badge">{active}</span> : null}
@@ -1028,11 +1029,11 @@ window.ArtistaViews = (function () {
     );
   }
 
-  function SongList({ songs, currentId, playing, likeIds, onPlay, onToggleLike, onRemove, playlists, onAddToPlaylist, onGoPlaylists }) {
+  function SongList({ songs, currentId, playing, likeIds, onPlay, onToggleLike, onRemove, playlists, onAddToPlaylist, onGoPlaylists, emptyMessage }) {
     if (!songs || !songs.length) {
       return (
         <p className="muted">
-          Aún no tienes canciones favoritas. Reproduce una vista previa y pulsa el corazón.
+          {emptyMessage || "Aún no tienes canciones favoritas. Reproduce una vista previa y pulsa el corazón."}
         </p>
       );
     }
@@ -2454,12 +2455,11 @@ window.ArtistaViews = (function () {
           <div>
             <strong>Contacto</strong>
             <p>
-              {/* ✏️ Edita aquí tus datos de contacto */}
-              <a className="link" href="mailto:tu-correo@ejemplo.com">tu-correo@ejemplo.com</a>
+              <a className="link" href="https://github.com/alejandrozz-1/ubeat" target="_blank" rel="noreferrer">github.com/alejandrozz-1/ubeat</a>
               <br />
-              <a className="link" href="https://github.com/tu-usuario" target="_blank" rel="noreferrer">github.com/tu-usuario</a>
+              <a className="link" href="https://ubeat.vercel.app">ubeat.vercel.app</a>
               <br />
-              <a className="link" href="https://tusitio.com" target="_blank" rel="noreferrer">tusitio.com</a>
+              <span className="muted">¿Dudas? Usa el chat de Soporte.</span>
             </p>
           </div>
           <div>
