@@ -677,7 +677,213 @@
   scrollbar-color: var(--scroll) transparent;
 }
 
-.detail-eyebrow {
+/* ---------- Crystal Liquid iOS estética ---------- */
+:root {
+  --crystal-a: #a855f7;
+  --crystal-b: #ec4899;
+  --crystal-c: #f472b6;
+  --crystal-d: #fbbf24;
+  --crystal-e: #22c55e;
+  --crystal-f: #eab308;
+  --crystal-g: #8b5cf6;
+  --crystal-h: #06b6d4;
+}
+
+/* Fondo cristal con animación de giro sutil */
+.crystal-liquid {
+  --crystal-gradient: conic-gradient(
+    from 180deg at 30% 30%,
+    var(--crystal-a) 0deg,
+    var(--crystal-b) 45deg,
+    var(--crystal-c) 90deg,
+    var(--crystal-d) 135deg,
+    var(--crystal-e) 180deg,
+    var(--crystal-f) 225deg,
+    var(--crystal-g) 270deg,
+    var(--crystal-h) 315deg
+  );
+  position: relative;
+  isolation: isolate;
+}
+
+.crystal-liquid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--crystal-gradient);
+  opacity: 0.35;
+  animation: crystalRotate 22s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes crystalRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Tarjetas/cajas con efecto cristal */
+.crystal-card {
+  background: rgba(17, 23, 32, 0.7);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 28px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.crystal-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  height: 35%;
+  border-radius: 50% 50% 0 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.02),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* Barra de progreso estilo iOS */
+.progress-bar {
+  height: 3px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--crystal-gradient);
+  width: 100%;
+  border-radius: 999px;
+  animation: progressShimmer 2s ease-in-out infinite;
+}
+
+@keyframes progressShimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Wave/ripple animado al iniciar reproducción */
+@keyframes wavePulse {
+  0%   { opacity: 0.2; transform: scale(0); }
+  50%  { opacity: 0.6; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.2); }
+}
+
+.wave-anim {
+  animation: wavePulse 1.5s ease-out;
+}
+
+/* Botones cristalinos */
+.crystal-btn {
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 18px;
+  color: var(--text);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 4px;
+}
+
+.crystal-btn:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.crystal-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.crystal-btn.secondary {
+  background: rgba(0,0,0,0.3);
+  border-color: rgba(255,255,255,0.2);
+}
+
+.crystal-btn.secondary:hover {
+  background: rgba(0,0,0,0.4);
+}
+
+/* Letra sincronizada estilo LRCLIB */
+.lyric-line {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.lyric-line.active {
+  opacity: 1;
+  transform: translateY(0);
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.lyric-line.faded {
+  opacity: 0.3;
+}
+
+.lyric-container {
+  height: 200px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.lyric-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.lyric-container::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+}
+
+/* Portada cristalina */
+.crystal-cover {
+  width: 100%;
+  height: 260px;
+  border-radius: 20px 20px 0 0;
+  object-fit: cover;
+  background: var(--crystal-gradient);
+  filter: brightness(0.8);
+}
+
+/* Efecto float sutil en la portada */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.cover-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Transición de entrada de la pantalla completa */
+.screen-enter {
+  transition: all 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@media (max-width: 560px) {
+  .crystal-card { border-radius: 16px; }
+  .progress-bar { display: none; }
+  .lyric-container { height: 150px; }
+}
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
