@@ -694,14 +694,14 @@ window.ArtistaViews = (function () {
     rating,
     onRate,
   }) {
+    // Centrado en el VIEWPORT (no en el área del contenido): el backdrop
+    // (z 95) tapa el sidebar fijo (z 90), igual que la ficha de perfil.
+    // Restar --sidebar-w dejaba el modal 125px a la derecha del centro.
     const targetRect = () => {
-      const content = document.querySelector(".content");
-      const off = content ? parseFloat(getComputedStyle(content).marginLeft) || 0 : 0;
-      const availW = Math.max(360, window.innerWidth - off);
-      const w = Math.min(880, availW * 0.94);
+      const w = Math.min(880, Math.max(360, window.innerWidth * 0.94));
       const h = Math.min(700, window.innerHeight * 0.86);
       return {
-        left: off + (availW - w) / 2,
+        left: (window.innerWidth - w) / 2,
         top: (window.innerHeight - h) / 2,
         width: w,
         height: h,
@@ -719,6 +719,13 @@ window.ArtistaViews = (function () {
         document.body.style.overflow = "";
         cancelAnimationFrame(raf);
       };
+    }, []);
+
+    // Al redimensionar (o girar el móvil) sigue quedando centrado.
+    useEffect(() => {
+      const onResize = () => setStyle((s) => ({ ...s, ...targetRect() }));
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
     }, []);
 
     useEffect(() => {
