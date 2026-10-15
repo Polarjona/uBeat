@@ -2533,6 +2533,9 @@ window.ArtistaViews = (function () {
     const [style, setStyle] = useState(null);
     const [img, setImg] = useState(artist.image || (track && track.artwork) || "");
     const lineRefs = useRef([]);
+    // La animación de expansión dura ~420 ms; hasta entonces el panel aún
+    // está creciendo y cualquier cálculo de centrado quedaría desfasado.
+    const openedRef = useRef(false);
 
     // Rect de salida: la barra inferior. Rect objetivo: pantalla completa
     // dejando hueco para que el BottomBar siga visible y operativo.
@@ -2566,9 +2569,13 @@ window.ArtistaViews = (function () {
           setStyle((s) => (s ? { ...s, opacity: 1, ...targetRect() } : s))
         )
       );
+      const opened = setTimeout(() => {
+        openedRef.current = true;
+      }, 460);
       return () => {
         document.body.style.overflow = "";
         cancelAnimationFrame(raf);
+        clearTimeout(opened);
       };
     }, []);
 
@@ -2629,22 +2636,57 @@ window.ArtistaViews = (function () {
       return out;
     }, [lyrics]);
 
+    // Sincronización letra ↔ preview: la letra cubre la canción entera
+    // (~4 min) pero el audio es una preview de 30 s. Escalamos los
+    // timestamps proporcionalmente para que toda la letra se recorra
+    // durante la preview, terminando justo con el audio (como hacen
+    // otros reproductores con previews).
+    const lyricSpan = React.useMemo(() => {
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        if (lines[i].time !== null) return lines[i].time;
+      }
+      return 0;
+    }, [lines]);
+    const syncTime =
+      dur > 0 && lyricSpan > dur + 1 ? curTime * (lyricSpan / dur) : curTime;
+
     // Línea activa según el tiempo actual (si las líneas llevan tiempo).
     let active = -1;
     if (lines.length && lines[0].time !== null) {
       for (let i = 0; i < lines.length; i += 1) {
-        if (lines[i].time <= curTime + 0.2) active = i;
+        if (lines[i].time <= syncTime + 0.2) active = i;
         else break;
       }
     }
 
-    // Auto-scroll de la letra a la línea activa.
+    // Auto-scroll de la letra a la línea activa, SOLO dentro del panel de
+    // la letra (scrollIntoView arrastraría también al panel cristal y a la
+    // página, sacando el reproductor de su sitio).
     useEffect(() => {
-      if (active < 0) return;
-      const el = lineRefs.current[active];
-      if (el && el.scrollIntoView) {
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
-      }
+      if (active < 0) return undefined;
+      let raf = 0;
+      let cancelled = false;
+      const tryScroll = () => {
+        if (cancelled) return;
+        const el = lineRefs.current[active];
+        const box = el && el.closest ? el.closest(".ps-lyrics") : null;
+        // Esperamos a que la expansión termine y el panel tenga layout:
+        // de lo contrario el centrado se calcula sobre un rect en movimiento.
+        if (!box || !box.clientHeight || !openedRef.current) {
+          raf = requestAnimationFrame(tryScroll);
+          return;
+        }
+        const delta =
+          el.getBoundingClientRect().top - box.getBoundingClientRect().top;
+        const target =
+          box.scrollTop + delta - box.clientHeight / 2 + el.offsetHeight / 2;
+        box.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+      };
+      raf = requestAnimationFrame(tryScroll);
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+      };
     }, [active]);
 
     const progress = dur ? Math.min(1, curTime / dur) : 0;
@@ -2663,113 +2705,128 @@ window.ArtistaViews = (function () {
           role="dialog"
           aria-label={track ? `Reproductor: ${track.track}` : "Reproductor"}
         >
-          <header className="ps-head">
-            <span className="ps-eyebrow">Reproductor completo</span>
-            <div className="ps-head-actions">
-              {appleMusicUrl ? (
-                <a
-                  className="crystal-btn am-btn"
-                  href={appleMusicUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Escuchar en Apple Music
-                </a>
-              ) : null}
-              <button
-                type="button"
-                className="crystal-btn secondary"
-                onClick={onClose}
-                aria-label="Cerrar reproductor"
-              >
-                Cerrar ⌄
-              </button>
-            </div>
-          </header>
+          <button
+            type="button"
+            className="ps-close"
+            onClick={onClose}
+            aria-label="Cerrar reproductor"
+            title="Cerrar reproductor"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" fill="none" />
+            </svg>
+          </button>
+
+          {appleMusicUrl ? (
+            <a
+              className="ps-apple"
+              href={appleMusicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2l.9 2.6a4.6 4.6 0 002.9 2.9L18.4 8.4l-2.6.9a4.6 4.6 0 00-2.9 2.9L12 14.8l-.9-2.6a4.6 4.6 0 00-2.9-2.9L5.6 8.4l2.6-.9a4.6 4.6 0 002.9-2.9L12 2zm6.5 10.5l.6 1.7a3 3 0 001.9 1.9l1.7.6-1.7.6a3 3 0 00-1.9 1.9l-.6 1.7-.6-1.7a3 3 0 00-1.9-1.9l-1.7-.6 1.7-.6a3 3 0 001.9-1.9l.6-1.7z" />
+              </svg>
+              Escuchar en Apple Music
+            </a>
+          ) : null}
 
           <div className="ps-grid">
-            {/* Columna izquierda: portada + biografía */}
+            {/* Columna izquierda: portada del álbum + biografía */}
             <section className="ps-left">
-              <div className="ps-cover-wrap">
+              <div className="ps-panel ps-cover-card">
                 <img
                   className="ps-cover"
                   src={img}
                   alt={artist.name}
                   onError={() => setImg(window.ArtistModel.fallbackImg)}
                 />
+                <p className="ps-track-name">{track ? track.track : ""}</p>
+                <p className="ps-track-artist">{artist.name}</p>
               </div>
-              <h2 className="ps-title">{track ? track.track : ""}</h2>
-              <p className="ps-artist">{artist.name}</p>
-              <div className="ps-bio-scroll">
-                <p className="ps-bio">
-                  {artist.bio || "Sin biografía disponible para este artista."}
-                </p>
+              <div className="ps-panel ps-bio-card">
+                <p className="ps-bio-label">Biografía · {artist.name}</p>
+                <div className="ps-bio-scroll">
+                  <p className="ps-bio">
+                    {artist.bio || "Sin biografía disponible para este artista."}
+                  </p>
+                </div>
               </div>
             </section>
 
-            {/* Columna derecha: letra sincronizada + controles */}
+            {/* Columna derecha: barra de reproductor + letra estilo Spotify */}
             <section className="ps-right">
-              <div className="lyric-container ps-lyrics">
-                {lines.length ? (
-                  lines.map((l, i) => (
-                    <div
-                      key={`${l.time}-${i}`}
-                      ref={(el) => {
-                        lineRefs.current[i] = el;
+              <div className="ps-panel ps-player-bar">
+                <img className="ps-mini-art" src={img} alt="" aria-hidden="true" />
+                <div className="ps-bar-info">
+                  <div className="ps-bar-title">{track ? track.track : "—"}</div>
+                  <div className="ps-bar-artist">{artist.name}</div>
+                </div>
+                <div className="ps-bar-mid">
+                  <div className="ps-times">
+                    <span>{fmtTime(curTime)}</span>
+                    <input
+                      className="player-seek ps-seek"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={progress}
+                      style={{
+                        background: `linear-gradient(90deg, var(--accent) ${Math.round(
+                          progress * 100
+                        )}%, rgba(255,255,255,0.16) ${Math.round(progress * 100)}%)`,
                       }}
-                      className={
-                        "lyric-line" +
-                        (i === active ? " active" : "") +
-                        (active >= 0 && i < active - 2 ? " faded" : "")
-                      }
+                      onChange={(e) => seek(Number(e.target.value))}
+                      aria-label="Progreso"
+                    />
+                    <span>{fmtTime(dur || 30)}</span>
+                  </div>
+                  <div className="player-controls ps-buttons">
+                    <button type="button" className="ps-step" onClick={() => onStep(-1)} aria-label="Anterior">
+                      <PrevIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="ps-play"
+                      onClick={onToggle}
+                      aria-label={playing ? "Pausar" : "Reproducir"}
                     >
-                      {l.text}
-                    </div>
-                  ))
-                ) : loadingLyrics ? (
-                  <p className="muted ps-lyrics-note">Cargando letra…</p>
-                ) : (
-                  <p className="muted ps-lyrics-note">
-                    No hay letra sincronizada disponible para esta canción.
-                  </p>
-                )}
+                      {playing ? <PauseIcon /> : <PlayIcon />}
+                    </button>
+                    <button type="button" className="ps-step" onClick={() => onStep(1)} aria-label="Siguiente">
+                      <NextIcon />
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="ps-controls">
-                <div className="ps-times">
-                  <span>{fmtTime(curTime)}</span>
-                  <input
-                    className="player-seek ps-seek"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={progress}
-                    style={{
-                      background: `linear-gradient(90deg, var(--accent) ${Math.round(
-                        progress * 100
-                      )}%, var(--surface-3) ${Math.round(progress * 100)}%)`,
-                    }}
-                    onChange={(e) => seek(Number(e.target.value))}
-                    aria-label="Progreso"
-                  />
-                  <span>{fmtTime(dur || 30)}</span>
-                </div>
-                <div className="player-controls ps-buttons">
-                  <button type="button" onClick={() => onStep(-1)} aria-label="Anterior">
-                    <PrevIcon />
-                  </button>
-                  <button
-                    type="button"
-                    className="play"
-                    onClick={onToggle}
-                    aria-label={playing ? "Pausar" : "Reproducir"}
-                  >
-                    {playing ? <PauseIcon /> : <PlayIcon />}
-                  </button>
-                  <button type="button" onClick={() => onStep(1)} aria-label="Siguiente">
-                    <NextIcon />
-                  </button>
+              <div className="ps-panel ps-lyrics-card">
+                <p className="ps-lyrics-label">Letra de la canción</p>
+                <div className="lyric-container ps-lyrics">
+                  {lines.length ? (
+                    lines.map((l, i) => (
+                      <div
+                        key={`${l.time}-${i}`}
+                        ref={(el) => {
+                          lineRefs.current[i] = el;
+                        }}
+                        className={
+                          "lyric-line" +
+                          (i === active ? " active" : "") +
+                          (active >= 0 && i < active - 2 ? " faded" : "")
+                        }
+                      >
+                        {l.text}
+                      </div>
+                    ))
+                  ) : loadingLyrics ? (
+                    <p className="muted ps-lyrics-note">Cargando letra…</p>
+                  ) : (
+                    <p className="muted ps-lyrics-note">
+                      No hay letra sincronizada disponible para esta canción.
+                    </p>
+                  )}
                 </div>
               </div>
             </section>

@@ -770,7 +770,8 @@
     }
 
     // ---- Reproductor completo (Crystal Liquid) ----
-    // Descarga letra (LRCLIB) y enlace de Apple Music para la pista actual.
+    // Descarga letra (LRCLIB), enlace de Apple Music y (si falta) la
+    // biografía del artista para la pista actual.
     async function loadPlayerExtras(track) {
       if (!track) {
         setState((s) => ({ ...s, playerLyrics: null, playerLoadingLyrics: false, playerAppleUrl: "" }));
@@ -783,7 +784,15 @@
             artist: track.artist,
             title: track.track,
             album: track.album,
-            duration: track.duration,
+            // LRCLIB espera la duración de la canción COMPLETA en segundos.
+            // El track de la cola lleva durationMs de la preview (30 s), que
+            // solo serviría si fuera la pista entera: no la usamos para no
+            // descuadrar el matching.
+            duration:
+              track.duration ||
+              (track.durationMs && track.durationMs > 60000
+                ? Math.round(track.durationMs / 1000)
+                : undefined),
           })
           .catch(() => ({ syncedLyrics: null, plainLyrics: null })),
         model.itunesTrack(track.trackId).catch(() => null),
@@ -794,6 +803,22 @@
         playerLoadingLyrics: false,
         playerAppleUrl: url || "",
       }));
+      // La biografía se pide aparte: si el artista ya viene con bio (desde
+      // la ficha) o coincide con la pista actual, no la volvemos a buscar.
+      const cur = getState().playerArtist;
+      if (!cur || !cur.bio || cur.name !== track.artist) {
+        const bio = await model.artistBio(track.artist).catch(() => "");
+        if (bio) {
+          setState((s) => ({
+            ...s,
+            playerArtist: {
+              name: (s.playerArtist && s.playerArtist.name) || track.artist,
+              image: (s.playerArtist && s.playerArtist.image) || track.artwork || "",
+              bio,
+            },
+          }));
+        }
+      }
     }
 
     function openPlayer(artist) {

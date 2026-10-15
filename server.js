@@ -1964,10 +1964,57 @@ app.get("/api/artists/preview", async (req, res) => {
   }
 });
 
+// GET /api/artists/bio?name=Queen → biografía del artista (TheAudioDB).
+// La catálogo no guarda bio, así que la pedimos bajo demanda para el
+// reproductor completo. Se cachea en memoria: la bio de un artista no
+// cambia y así evitamos martillear a TheAudioDB.
+const BIO_CACHE = new Map(); // nombre(mayúsculas) → { bio, exp }
+app.get("/api/artists/bio", async (req, res) => {
+  try {
+    const name = (req.query.name || "").trim();
+    if (!name) return res.status(400).json({ ok: false, error: "Falta ?name=" });
+    const key = name.toLowerCase();
+    const cached = BIO_CACHE.get(key);
+    if (cached && cached.exp > Date.now())
+      return res.json({ ok: true, bio: cached.bio });
+    const url = `https://www.theaudiodb.com/api/v1/json/123/search.php?s=${encodeURIComponent(name)}`;
+    const r = await fetch(url);
+    let bio = "";
+    if (r.ok) {
+      const data = await r.json();
+      const a = (data.artists || []).find((x) => similar(x.strArtist, name)) || null;
+      // Preferimos español; si no, inglés.
+      bio = (a && (a.strBiographyES || a.strBiographyEN)) || "";
+    }
+    BIO_CACHE.set(key, { bio, exp: Date.now() + 24 * 60 * 60 * 1000 });
+    res.json({ ok: true, bio });
+  } catch (err) {
+    res.json({ ok: true, bio: "", error: err.message });
+  }
+});
+
 // Letra sincronizada (LRCLIB, sin claves). Proxy para evitar CORS.
 // GET /api/lyrics?artist=&title=&album=&duration=
-// LRCLIB pide un User-Agent identificativo; sin él responde 429.
+// LRCLIB pide un User-Agent identificativo; sin él responde 429. Además
+// aplica rate-limit de forma intermitente, así que: (1) cacheamos los
+// aciertos en memoria para no repetir llamadas y (2) reintentamos con
+// espera corta cuando nos llega un 429.
 const LRCLIB_UA = "uBeat/1.0 (https://github.com/Polarjona/uBeat)";
+const LRCLIB_CACHE = new Map(); // clave → { lyrics, exp }
+const LRCLIB_CACHE_TTL = 60 * 60 * 1000; // 1 h
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function lrclibFetch(url) {
+  // Reintenta en 429 hasta 2 veces con espera creciente.
+  for (let attempt = 0; ; attempt += 1) {
+    const r = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": LRCLIB_UA },
+    });
+    if (r.status !== 429 || attempt >= 2) return r;
+    await sleep(800 * (attempt + 1));
+  }
+}
+
 app.get("/api/lyrics", async (req, res) => {
   try {
     const artist = (req.query.artist || "").trim();
@@ -1976,41 +2023,55 @@ app.get("/api/lyrics", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Faltan ?artist= o ?title=" });
     const album = (req.query.album || "").trim();
     const duration = Number(req.query.duration) || 0;
-    const UA = LRCLIB_UA;
+
+    const cacheKey = `${artist}|${title}|${album}`.toLowerCase();
+    const cached = LRCLIB_CACHE.get(cacheKey);
+    if (cached && cached.exp > Date.now()) return res.json(cached.lyrics);
+    // Limpieza ligera para que el Map no crezca sin control.
+    if (LRCLIB_CACHE.size > 400) {
+      for (const [k, v] of LRCLIB_CACHE) if (v.exp <= Date.now()) LRCLIB_CACHE.delete(k);
+    }
 
     // /api/get exige artist+title; /api/search es más tolerante como alternativa.
     const params = new URLSearchParams({ artist, title });
     if (album) params.set("album", album);
     if (duration > 0) params.set("duration", String(Math.round(duration)));
 
-    const r = await fetch(`https://lrclib.net/api/get?${params.toString()}`, {
-      headers: { "Accept": "application/json", "User-Agent": UA },
-    });
+    const r = await lrclibFetch(`https://lrclib.net/api/get?${params.toString()}`);
+    let payload = null;
     if (r.ok) {
       const data = await r.json();
-      return res.json({
+      payload = {
         ok: true,
         syncedLyrics: data.syncedLyrics || null,
         plainLyrics: data.plainLyrics || null,
-      });
+      };
+    } else {
+      // 404 (sin coincidencia exacta) o 429 (limitado): buscamos la más parecida.
+      const s = await lrclibFetch(
+        `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}` +
+          `&artist_name=${encodeURIComponent(artist)}` +
+          (album ? `&album_name=${encodeURIComponent(album)}` : "") +
+          (duration > 0 ? `&duration=${Math.round(duration)}` : "")
+      );
+      if (s.ok) {
+        const list = await s.json();
+        const arr = Array.isArray(list) ? list : [];
+        const hit = arr.find((x) => x.syncedLyrics) || arr[0] || null;
+        payload = {
+          ok: true,
+          syncedLyrics: hit ? hit.syncedLyrics || null : null,
+          plainLyrics: hit ? hit.plainLyrics || null : null,
+        };
+      }
     }
-    // 404 (sin coincidencia exacta) o 429 (limitado): buscamos la más parecida.
-    const s = await fetch(
-      `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}` +
-        `&artist_name=${encodeURIComponent(artist)}` +
-        (album ? `&album_name=${encodeURIComponent(album)}` : "") +
-        (duration > 0 ? `&duration=${Math.round(duration)}` : ""),
-      { headers: { "Accept": "application/json", "User-Agent": UA } }
-    );
-    if (!s.ok) return res.json({ ok: true, syncedLyrics: null, plainLyrics: null });
-    const list = await s.json();
-    const arr = Array.isArray(list) ? list : [];
-    const hit = arr.find((x) => x.syncedLyrics) || arr[0] || null;
-    return res.json({
-      ok: true,
-      syncedLyrics: hit ? hit.syncedLyrics || null : null,
-      plainLyrics: hit ? hit.plainLyrics || null : null,
-    });
+    // Si LRCLIB sigue limitado no cacheamos (para reintentar luego);
+    // si hubo resultado (aunque sea "sin letra") lo guardamos.
+    if (payload) {
+      LRCLIB_CACHE.set(cacheKey, { lyrics: payload, exp: Date.now() + LRCLIB_CACHE_TTL });
+      return res.json(payload);
+    }
+    res.json({ ok: true, syncedLyrics: null, plainLyrics: null });
   } catch (err) {
     // Nunca rompemos el reproductor por falta de letra.
     res.json({ ok: true, syncedLyrics: null, plainLyrics: null, error: err.message });

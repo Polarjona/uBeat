@@ -886,105 +886,200 @@
   .lyric-container { height: 150px; }
 }
 
-/* ---------- Reproductor completo (Crystal Liquid) ---------- */
+/* ---------- Reproductor completo · Crystal Liquid (iOS 26) ----------
+   Vidrio transparente: el fondo de la app se ve detrás con blur/saturación
+   (backdrop-filter), bordes de luz especulares (inset highlights) y
+   "burbujas" de color que flotan dentro del cristal (pseudoelementos
+   con gradientes radiales animados). */
 .player-screen-backdrop {
   position: fixed;
   inset: 0;
   z-index: 96;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(8, 10, 16, 0.28);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
   transition: opacity 0.4s ease;
 }
 .player-screen-backdrop.closing { opacity: 0; }
 
 .player-screen {
-  background: color-mix(in srgb, var(--bg) 92%, #141828 8%);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 26px;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+  /* Cristal: capa translúcida + borde de luz + doble brillo interior. */
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.035) 42%, rgba(255, 255, 255, 0.07));
+  backdrop-filter: blur(42px) saturate(1.8);
+  -webkit-backdrop-filter: blur(42px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 30px;
+  box-shadow:
+    0 40px 110px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 40px rgba(255, 255, 255, 0.03);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   z-index: 97;
-}
-/* Sustituye el "arcoíris" giratorio por un halo suave y estático en el borde. */
-.player-screen.crystal-liquid::before {
-  border-radius: 26px;
-  opacity: 0.14;
-  filter: blur(60px);
-  animation: crystalDrift 18s ease-in-out infinite alternate;
-}
-@keyframes crystalDrift {
-  from { transform: scale(1) translate(-4%, -3%); }
-  to { transform: scale(1.15) translate(5%, 4%); }
+  isolation: isolate;
 }
 .player-screen.closing { opacity: 0; }
 
-.ps-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px 22px 10px;
-  flex-shrink: 0;
+/* Burbujas de cristal líquido: halos de color que flotan dentro del panel. */
+.player-screen::before,
+.player-screen::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(70px);
 }
-.ps-eyebrow {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent-2);
+.player-screen::before {
+  width: 46%;
+  padding-top: 46%;
+  top: -14%;
+  left: -8%;
+  background: radial-gradient(circle, rgba(122, 91, 255, 0.5), transparent 68%);
+  animation: psBubbleA 16s ease-in-out infinite alternate;
 }
-.ps-head-actions { display: flex; align-items: center; gap: 10px; }
-.ps-head-actions .crystal-btn { margin: 0; }
-.am-btn {
-  text-decoration: none;
-  background: linear-gradient(120deg, #fa233b, #fb5c74);
-  border: none;
-  color: #fff;
-  font-weight: 600;
+.player-screen::after {
+  width: 52%;
+  padding-top: 52%;
+  bottom: -20%;
+  right: -10%;
+  background: radial-gradient(circle, rgba(255, 77, 148, 0.38), rgba(0, 200, 255, 0.22) 55%, transparent 72%);
+  animation: psBubbleB 20s ease-in-out infinite alternate;
 }
-.am-btn:hover { background: linear-gradient(120deg, #fb5c74, #fa233b); }
+@keyframes psBubbleA {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(10%, 14%) scale(1.18); }
+}
+@keyframes psBubbleB {
+  from { transform: translate(0, 0) scale(1.1); }
+  to { transform: translate(-12%, -10%) scale(0.92); }
+}
 
+/* Botón Apple Music: esquina superior derecha del overlay. */
+.ps-apple {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  z-index: 5;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(250, 35, 59, 0.92), rgba(251, 92, 116, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 8px 26px rgba(250, 35, 59, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.ps-apple:hover { transform: translateY(-1px) scale(1.02); box-shadow: 0 12px 32px rgba(250, 35, 59, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+.ps-apple svg { width: 14px; height: 14px; fill: #fff; }
+
+.ps-close {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.ps-close:hover { background: rgba(255, 255, 255, 0.18); transform: scale(1.05); }
+.ps-close svg { width: 15px; height: 15px; fill: currentColor; }
+
+/* Rejilla: columna izquierda (portada + biografía) y derecha (barra de
+   reproductor + letra grande), como el mockup. */
 .ps-grid {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr);
-  gap: 24px;
-  padding: 6px 22px 22px;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  /* Filas y columnas constrainidas: nada desborda el panel. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 18px;
+  padding: 68px 20px 20px;
+}
+
+/* Panel de vidrio reutilizable para las tarjetas interiores. */
+.ps-panel {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 34px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
 }
 
 .ps-left {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 10px;
+  gap: 18px;
+  /* Reparte el alto entre portada y biografía sin desbordar. */
+  grid-row: 1;
 }
-.ps-cover-wrap {
-  position: relative;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+
+/* Portada del álbum (arriba, cuadrada). */
+.ps-cover-card {
+  padding: 14px;
   flex-shrink: 0;
-  aspect-ratio: 1 / 1;
-  max-height: 46vh;
 }
 .ps-cover {
-  width: 100%;
-  height: 100%;
+  width: min(100%, 42vh);
+  aspect-ratio: 1 / 1;
   object-fit: cover;
   display: block;
-  animation: float 6s ease-in-out infinite;
+  margin: 0 auto;
+  border-radius: 16px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
 }
-.ps-title {
-  font-size: clamp(20px, 2.4vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 4px 0 0;
+.ps-track-name {
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  margin: 12px 2px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.ps-artist { color: var(--muted); font-weight: 600; margin: 0; }
+.ps-track-artist { color: var(--muted); font-weight: 600; font-size: 13.5px; margin: 0 2px; }
+
+/* Biografía del artista (debajo, con scroll). */
+.ps-bio-card {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+}
+.ps-bio-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 8px;
+  flex-shrink: 0;
+}
 .ps-bio-scroll {
   overflow-y: auto;
   min-height: 0;
@@ -993,50 +1088,139 @@
   scrollbar-width: thin;
   scrollbar-color: var(--scroll) transparent;
 }
-.ps-bio { color: var(--muted); line-height: 1.65; font-size: 14px; margin: 4px 0 0; }
+.ps-bio { color: var(--muted); line-height: 1.7; font-size: 13.5px; margin: 0; }
 
+/* Columna derecha. */
 .ps-right {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  gap: 18px;
+  grid-row: 1;
+}
+
+/* Barra del reproductor ("reproductor nuevo" del mockup): controles en fila. */
+.ps-player-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 20px;
+}
+.ps-mini-art {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.ps-bar-info { min-width: 0; flex-shrink: 1; }
+.ps-bar-title {
+  font-weight: 700;
+  font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ps-bar-artist { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-bar-mid { flex: 1; min-width: 120px; display: flex; flex-direction: column; gap: 2px; }
+.ps-times {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ps-seek { flex: 1; }
+.ps-buttons {
+  display: flex;
+  align-items: center;
   gap: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 20px;
-  padding: 18px 20px;
+  flex-shrink: 0;
+}
+.ps-buttons button {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.ps-buttons button:hover { transform: scale(1.08); }
+.ps-buttons .ps-play {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.ps-buttons .ps-play:hover { transform: scale(1.06); }
+.ps-buttons .ps-play svg { width: 19px; height: 19px; fill: currentColor; }
+.ps-buttons .ps-step svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* Panel de letra grande estilo Spotify. */
+.ps-lyrics-card {
+  flex: 1;
+  min-height: 0;
+  padding: 22px 26px;
+  display: flex;
+  flex-direction: column;
+}
+.ps-lyrics-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 10px;
+  flex-shrink: 0;
 }
 .ps-lyrics {
   flex: 1;
   min-height: 0;
   height: auto;
-  font-size: 16px;
-  padding-right: 10px;
-  mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll) transparent;
+  /* Fundidos arriba/abajo como en Spotify. */
+  mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
 }
-.ps-lyrics .lyric-line { font-size: 16px; margin: 6px 0; }
-.ps-lyrics .lyric-line.active { font-size: 19px; font-weight: 700; }
-.ps-lyrics-note { text-align: center; margin-top: 30px; }
-
-.ps-controls { flex-shrink: 0; }
-.ps-times {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+.ps-lyrics .lyric-line {
+  font-size: clamp(19px, 2.2vw, 27px);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+  margin: 10px 0;
+  opacity: 0.38;
+  transform: none;
+  transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease;
 }
-.ps-seek { flex: 1; }
-.ps-buttons { justify-content: center; margin-top: 10px; }
+.ps-lyrics .lyric-line.active {
+  opacity: 1;
+  transform: scale(1.03);
+  transform-origin: left center;
+  color: var(--text);
+}
+.ps-lyrics .lyric-line.faded { opacity: 0.16; }
+.ps-lyrics-note { text-align: center; margin-top: 34px; font-size: 14px; }
 
 .detail-expand { margin: 18px 0 4px; text-align: center; }
 .detail-expand .crystal-btn { width: 100%; }
 
 @media (max-width: 860px) {
-  .ps-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .ps-cover-wrap { max-height: 30vh; }
-  .ps-bio-scroll { display: none; }
+  .ps-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; padding-top: 64px; gap: 12px; }
+  .ps-cover-card { display: flex; align-items: center; gap: 12px; padding: 10px; }
+  .ps-cover { width: 64px; height: 64px; aspect-ratio: auto; border-radius: 10px; margin: 0; }
+  .ps-track-name { margin-top: 0; font-size: 16px; }
+  .ps-bio-card { display: none; }
+  .ps-lyrics .lyric-line { font-size: 18px; }
+  .ps-apple { padding: 8px 12px; font-size: 11px; }
 }
 
 .detail-eyebrow {

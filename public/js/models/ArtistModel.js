@@ -521,6 +521,21 @@
       return data.tracks || [];
     },
 
+    // Biografía del artista (TheAudioDB vía proxy). La usamos en el
+    // reproductor completo; devuelve "" si no hay.
+    async artistBio(name) {
+      try {
+        const res = await fetch(
+          `/api/artists/bio?name=${encodeURIComponent(name || "")}`
+        );
+        if (!res.ok) return "";
+        const data = await res.json();
+        return data.bio || "";
+      } catch (_) {
+        return "";
+      }
+    },
+
     // Letra sincronizada (LRCLIB vía proxy del servidor).
     // Devuelve { syncedLyrics, plainLyrics } (synced puede ser null).
     async lyrics({ artist, title, album, duration }) {
