@@ -5,7 +5,7 @@
  * Controlador: window.createArtistController
  */
 const { useState, useEffect, useRef } = React;
-const { SearchBar, SourcePill, ArtistGrid, ArtistChart, ArtistDetail, Loader, Hero, SkeletonGrid, SkeletonChart, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView, SupportFab } = window.ArtistaViews;
+const { SearchBar, SourcePill, ArtistGrid, ArtistChart, ArtistDetail, ArtistPlayerScreen, Loader, Hero, SkeletonGrid, SkeletonChart, FilterDropdown, Footer, Rail, SideMenu, AuthModal, SongList, BottomBar, PlaylistCreate, ResetPasswordView, CookieBanner, SettingsView, SocialRail, FriendProfile, ProfileCard, DiscoverView, PlanGate, SupportView, SupportFab } = window.ArtistaViews;
 
 function App() {
   const [state, setState] = useState({
@@ -48,6 +48,12 @@ function App() {
     barIdx: 0,
     barPlaying: false,
     barClosing: false,
+    playerOpen: false,
+    playerClosing: false,
+    playerArtist: null,
+    playerLyrics: null,
+    playerLoadingLyrics: false,
+    playerAppleUrl: "",
     chartsGlobal: [],
     chartsSpain: [],
     loadingCharts: true,
@@ -905,6 +911,10 @@ function App() {
               : state.ratings[String(state.detail.artist.id)]
           }
           onRate={(n) => ctrlRef.current.setRating(state.detail.artist.id, n)}
+          onExpand={(a) => {
+            if (state.barQueue.length > 0) ctrlRef.current.openPlayer(a);
+          }}
+          playerTrack={state.barQueue[state.barIdx] || null}
         />
       ) : null}
 
@@ -923,6 +933,28 @@ function App() {
           onClose={() => ctrlRef.current.closeBar()}
           prefsEnabled={!!(state.cookies && state.cookies.preferences)}
           onTrackStart={(info) => ctrlRef.current.trackStarted(info)}
+          onExpand={() => ctrlRef.current.openPlayer(null)}
+        />
+      ) : null}
+
+      {state.playerOpen && state.barQueue.length > 0 ? (
+        <ArtistPlayerScreen
+          artist={
+            state.playerArtist || {
+              name: state.barQueue[state.barIdx].artist,
+              image: state.barQueue[state.barIdx].artwork,
+              bio: "",
+            }
+          }
+          track={state.barQueue[state.barIdx]}
+          playing={state.barPlaying}
+          closing={state.playerClosing}
+          lyrics={state.playerLyrics}
+          loadingLyrics={state.playerLoadingLyrics}
+          appleMusicUrl={state.playerAppleUrl}
+          onClose={() => ctrlRef.current.closePlayer()}
+          onToggle={() => ctrlRef.current.barToggle()}
+          onStep={(d) => ctrlRef.current.barStep(d)}
         />
       ) : null}
 

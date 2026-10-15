@@ -739,10 +739,12 @@
         barIdx: (barIdx + dir + barQueue.length) % barQueue.length,
         barPlaying: true,
       }));
+      onPlayerTrackChange();
     }
 
     function barSelect(i) {
       setState((s) => ({ ...s, barIdx: i, barPlaying: true }));
+      onPlayerTrackChange();
     }
 
     function closeBar() {
@@ -756,9 +758,78 @@
             barPlaying: false,
             barClosing: false,
             barFromDiscover: false,
+            playerOpen: false,
+            playerClosing: false,
+            playerArtist: null,
+            playerLyrics: null,
+            playerLoadingLyrics: false,
+            playerAppleUrl: "",
           })),
         380
       );
+    }
+
+    // ---- Reproductor completo (Crystal Liquid) ----
+    // Descarga letra (LRCLIB) y enlace de Apple Music para la pista actual.
+    async function loadPlayerExtras(track) {
+      if (!track) {
+        setState((s) => ({ ...s, playerLyrics: null, playerLoadingLyrics: false, playerAppleUrl: "" }));
+        return;
+      }
+      setState((s) => ({ ...s, playerLoadingLyrics: true }));
+      const [ly, url] = await Promise.all([
+        model
+          .lyrics({
+            artist: track.artist,
+            title: track.track,
+            album: track.album,
+            duration: track.duration,
+          })
+          .catch(() => ({ syncedLyrics: null, plainLyrics: null })),
+        model.itunesTrack(track.trackId).catch(() => null),
+      ]);
+      setState((s) => ({
+        ...s,
+        playerLyrics: ly,
+        playerLoadingLyrics: false,
+        playerAppleUrl: url || "",
+      }));
+    }
+
+    function openPlayer(artist) {
+      const s = getState();
+      const track = s.barQueue[s.barIdx];
+      if (!track) return;
+      setState((x) => ({
+        ...x,
+        playerOpen: true,
+        playerClosing: false,
+        playerArtist: artist || null,
+        playerLyrics: null,
+        playerLoadingLyrics: false,
+        playerAppleUrl: "",
+      }));
+      loadPlayerExtras(track);
+    }
+
+    function closePlayer() {
+      setState((s) => (s.playerOpen ? { ...s, playerClosing: true } : s));
+      setTimeout(
+        () =>
+          setState((s) => ({
+            ...s,
+            playerOpen: false,
+            playerClosing: false,
+            playerArtist: null,
+          })),
+        420
+      );
+    }
+
+    // Si cambia de pista con el reproductor abierto, recarga letra y enlace.
+    function onPlayerTrackChange() {
+      const s = getState();
+      if (s.playerOpen && s.barQueue[s.barIdx]) loadPlayerExtras(s.barQueue[s.barIdx]);
     }
 
     // ---- Cookies (3 booleanos: necesarias, sesión, preferencias) ----
@@ -1050,6 +1121,9 @@
       barStep,
       barSelect,
       closeBar,
+      openPlayer,
+      closePlayer,
+      onPlayerTrackChange,
       loadPreview,
       setTrack,
       togglePlay,

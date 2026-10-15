@@ -1964,6 +1964,78 @@ app.get("/api/artists/preview", async (req, res) => {
   }
 });
 
+// Letra sincronizada (LRCLIB, sin claves). Proxy para evitar CORS.
+// GET /api/lyrics?artist=&title=&album=&duration=
+// LRCLIB pide un User-Agent identificativo; sin él responde 429.
+const LRCLIB_UA = "uBeat/1.0 (https://github.com/Polarjona/uBeat)";
+app.get("/api/lyrics", async (req, res) => {
+  try {
+    const artist = (req.query.artist || "").trim();
+    const title = (req.query.title || "").trim();
+    if (!artist || !title)
+      return res.status(400).json({ ok: false, error: "Faltan ?artist= o ?title=" });
+    const album = (req.query.album || "").trim();
+    const duration = Number(req.query.duration) || 0;
+    const UA = LRCLIB_UA;
+
+    // /api/get exige artist+title; /api/search es más tolerante como alternativa.
+    const params = new URLSearchParams({ artist, title });
+    if (album) params.set("album", album);
+    if (duration > 0) params.set("duration", String(Math.round(duration)));
+
+    const r = await fetch(`https://lrclib.net/api/get?${params.toString()}`, {
+      headers: { "Accept": "application/json", "User-Agent": UA },
+    });
+    if (r.ok) {
+      const data = await r.json();
+      return res.json({
+        ok: true,
+        syncedLyrics: data.syncedLyrics || null,
+        plainLyrics: data.plainLyrics || null,
+      });
+    }
+    // 404 (sin coincidencia exacta) o 429 (limitado): buscamos la más parecida.
+    const s = await fetch(
+      `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}` +
+        `&artist_name=${encodeURIComponent(artist)}` +
+        (album ? `&album_name=${encodeURIComponent(album)}` : "") +
+        (duration > 0 ? `&duration=${Math.round(duration)}` : ""),
+      { headers: { "Accept": "application/json", "User-Agent": UA } }
+    );
+    if (!s.ok) return res.json({ ok: true, syncedLyrics: null, plainLyrics: null });
+    const list = await s.json();
+    const arr = Array.isArray(list) ? list : [];
+    const hit = arr.find((x) => x.syncedLyrics) || arr[0] || null;
+    return res.json({
+      ok: true,
+      syncedLyrics: hit ? hit.syncedLyrics || null : null,
+      plainLyrics: hit ? hit.plainLyrics || null : null,
+    });
+  } catch (err) {
+    // Nunca rompemos el reproductor por falta de letra.
+    res.json({ ok: true, syncedLyrics: null, plainLyrics: null, error: err.message });
+  }
+});
+
+// Lookup en iTunes para obtener el enlace público (trackViewUrl) que usa el
+// botón "Escuchar en Apple Music". Sin claves, solo el id de pista.
+app.get("/api/itunes-lookup", async (req, res) => {
+  try {
+    const trackId = (req.query.trackId || "").trim();
+    if (!trackId)
+      return res.status(400).json({ ok: false, error: "Falta ?trackId=" });
+    const r = await fetch(
+      `https://itunes.apple.com/lookup?id=${encodeURIComponent(trackId)}`
+    );
+    if (!r.ok) throw new Error(`iTunes HTTP ${r.status}`);
+    const data = await r.json();
+    const item = (data.results || [])[0] || null;
+    res.json({ ok: true, url: item ? item.trackViewUrl || null : null });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Rellena nameLower que falte (lo crea el import original sin él).
 app.post("/api/artists/backfill", async (req, res) => {
   try {

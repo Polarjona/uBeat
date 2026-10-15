@@ -521,6 +521,36 @@
       return data.tracks || [];
     },
 
+    // Letra sincronizada (LRCLIB vía proxy del servidor).
+    // Devuelve { syncedLyrics, plainLyrics } (synced puede ser null).
+    async lyrics({ artist, title, album, duration }) {
+      const p = new URLSearchParams();
+      if (artist) p.set("artist", artist);
+      if (title) p.set("title", title);
+      if (album) p.set("album", album);
+      if (duration) p.set("duration", String(Math.round(duration)));
+      try {
+        const res = await fetch(`/api/lyrics?${p.toString()}`);
+        if (!res.ok) return { syncedLyrics: null, plainLyrics: null };
+        return await res.json();
+      } catch (_) {
+        return { syncedLyrics: null, plainLyrics: null };
+      }
+    },
+
+    // Lookup en iTunes para obtener el enlace trackViewUrl (Apple Music).
+    async itunesTrack(trackId) {
+      if (!trackId) return null;
+      try {
+        const res = await fetch(`/api/itunes-lookup?trackId=${encodeURIComponent(trackId)}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.url || null;
+      } catch (_) {
+        return null;
+      }
+    },
+
     // Países y géneros únicos para el desplegable de filtros.
     async filters() {
       const res = await fetch("/api/artists/filters");
