@@ -521,29 +521,17 @@
       return data.tracks || [];
     },
 
-    // Biografía del artista (TheAudioDB vía proxy). La usamos en el
-    // reproductor completo; devuelve "" si no hay.
-    async artistBio(name) {
-      try {
-        const res = await fetch(
-          `/api/artists/bio?name=${encodeURIComponent(name || "")}`
-        );
-        if (!res.ok) return "";
-        const data = await res.json();
-        return data.bio || "";
-      } catch (_) {
-        return "";
-      }
-    },
-
     // Letra sincronizada (LRCLIB vía proxy del servidor).
-    // Devuelve { syncedLyrics, plainLyrics } (synced puede ser null).
-    async lyrics({ artist, title, album, duration }) {
+    // Devuelve { syncedLyrics, plainLyrics, previewOffset? } (synced puede
+    // ser null; previewOffset = segundo de la canción donde empieza la
+    // preview, si el servidor lo conoce).
+    async lyrics({ artist, title, album, duration, trackId }) {
       const p = new URLSearchParams();
       if (artist) p.set("artist", artist);
       if (title) p.set("title", title);
       if (album) p.set("album", album);
       if (duration) p.set("duration", String(Math.round(duration)));
+      if (trackId) p.set("trackId", String(trackId));
       try {
         const res = await fetch(`/api/lyrics?${p.toString()}`);
         if (!res.ok) return { syncedLyrics: null, plainLyrics: null };

@@ -29,6 +29,7 @@ Buscador de cantantes estilo Spotify (solo información): **nombre, país, géne
   - `POST /api/artists/import` con `{ "name": "..." }` → importación manual (ideal para **Postman**).
   - `POST /api/artists/backfill` → rellena `nameLower` ausente. Las webs de artistas no se guardan ni se muestran.
   - `GET /api/artists/preview?artist=NOMBRE` → top canciones con vista previa de audio (30 s, iTunes, sin claves). El backend actúa de proxy.
+  - `GET /api/lyrics?artist=&title=&album=&duration=&trackId=` → letra de **LRCLIB** (sin claves; caché 1 h, negativa 10 min y reintentos ante 429/5xx con enfriamiento global de 20 s). Con `trackId` devuelve además `previewOffset` (segundo de la canción completa donde empieza esa preview, leído de la colección `preview_offsets`) para poder recortar y sincronizar la letra con el audio real; `cooled: true` cuando LRCLIB está limitado.
 - **Frontend:** **entrada directa al catálogo** (sin portada intermedia) con **Inicio** = **hero** de carrusel automático (con puntos de navegación y botón «Explorar catálogo») + rails “Para ti” (si hay sesión), “Le gusta a tus amigos” (si hay amigos), “Populares ahora” y “Populares en España” (flechas, máx. 20) + “Todos los artistas” en formato **catálogo chart** (posición, avatar y chips; **scroll infinito**, 24 por tanda). **Menú lateral fijo con iconos** (Inicio / **Descubrir** / Mis artistas favoritos / Mis canciones favoritas / Playlists / **Soporte** / Ajustes; en móvil se oculta y se abre con el botón **hamburguesa**) con desplegable **Social** (añadir por email, solicitudes, amigos, perfiles). **Buscador con sugerencias** (miniaturas + país/género, debounce) y **atajo de teclado `/`** para enfocarlo desde cualquier vista. **Skeletons** de carga en rejilla y rails. **Tema oscuro premium por defecto con tema claro** (persistido) y diseño **responsive**. **Vista Soporte**: asistente IA local (chips de sugerencias y respuestas sobre los datos de la app) + formulario para enviar tiquets y lista de “Mis tiquets” con su estado. **Botón flotante** (abajo a la derecha) que abre un chat rápido con el mismo asistente desde cualquier vista. **Vista Descubrir**: feed vertical a pantalla completa estilo TikTok/Shorts (una canción por pantalla, snap-scroll, autoplay con toque para pausar, Me gusta y acceso a la ficha del artista, scroll infinito con orden aleatorio). **Perfil de amigo o propio abierto como card/modal** (no cambia de vista). **Nota 0-10 por artista** en su ficha (persistida por usuario). **Vista Ajustes** con **color de página** (fondo general, independiente del acento), **color de acento personalizable** (6 tonos + libre, con persistencia), tema, cuenta y cookies. **Usuarios**: registro e inicio de sesión; corazón en la ficha (se tiñe con animación) y vista de favoritos. **Canciones con Me gusta**, vista propia con reproducción y botón ⋮ para añadirlas a tus **playlists** (crear, abrir, quitar canciones, eliminar). Reproductor in-app en la ficha ampliada y **barra inferior** (imagen, título, controles, volumen, Me gusta) con animación de aparición.
 
 ## Requisitos (sin permisos de administrador)
@@ -78,6 +79,31 @@ Abre **http://localhost:8080**. Panel de administración en **http://localhost:8
 - Resembrar ~100 artistas (merge, sin borrar): `node scripts/resembrar.js`
 - Sin argumento no borra nada. Tras vaciar, la home se rellena sola con
   tendencias y cada búsqueda guarda su artista: ideal para la demo en directo.
+
+## Letra sincronizada con la preview (offsets por ASR)
+
+Las previews de iTunes **no son siempre los primeros 30 s**: cada sello corta
+donde quiere (a veces directamente el estribillo). Para que la letra del
+reproductor caiga donde suena de verdad:
+
+1. `python scripts/alinear-previews.py [--artista "X"] [--limite N] [--archivo pistas.json] [--modelo base] [--reintentar]`
+   descarga cada preview, la transcribe con **faster-whisper** (marca por
+   palabra, sin claves ni ffmpeg: `pip install faster-whisper numpy`) y vota
+   el segundo de la canción donde empieza la preview contra la letra de
+   LRCLIB (la pide al servidor local, que debe estar corriendo). Los coros
+   repetidos se desempatan ponderando más las primeras palabras y, a igual
+   de fuerza, eligiendo la primera ocurrencia. Escribe de forma incremental
+   en `scripts/preview-offsets.json` (ignorado por git), así que se puede
+   cortar y reanudar.
+2. `node scripts/guardar-offsets.js [--fuerza] [--limite N]`
+   sube ese JSON a Firestore, colección **`preview_offsets`** (un documento
+   por `trackId`: `offset`, `confidence`, `votes`…). Requiere
+   `firebase-key.json`.
+3. `GET /api/lyrics?…&trackId=` devuelve `previewOffset` (caché en memoria
+   1 h) y el reproductor usa `canción = tiempo de la preview + offset` para
+   recortar la letra a la ventana que suena y marcar la línea activa. Sin
+   offset conocido (pistas nuevas o no calculadas) asume que la preview
+   empieza en el segundo 0, como hasta ahora.
 
 ## Notas de Firebase Auth
 

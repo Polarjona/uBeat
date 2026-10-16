@@ -770,8 +770,7 @@
     }
 
     // ---- Reproductor completo (Crystal Liquid) ----
-    // Descarga letra (LRCLIB), enlace de Apple Music y (si falta) la
-    // biografía del artista para la pista actual.
+    // Descarga letra (LRCLIB) y enlace de Apple Music para la pista actual.
     async function loadPlayerExtras(track) {
       if (!track) {
         setState((s) => ({ ...s, playerLyrics: null, playerLoadingLyrics: false, playerAppleUrl: "" }));
@@ -793,6 +792,9 @@
               (track.durationMs && track.durationMs > 60000
                 ? Math.round(track.durationMs / 1000)
                 : undefined),
+            // Para saber en qué segundo de la canción empieza esta preview
+            // (algunos sellos cortan el estribillo, no el inicio).
+            trackId: track.trackId,
           })
           .catch(() => ({ syncedLyrics: null, plainLyrics: null })),
         model.itunesTrack(track.trackId).catch(() => null),
@@ -803,22 +805,6 @@
         playerLoadingLyrics: false,
         playerAppleUrl: url || "",
       }));
-      // La biografía se pide aparte: si el artista ya viene con bio (desde
-      // la ficha) o coincide con la pista actual, no la volvemos a buscar.
-      const cur = getState().playerArtist;
-      if (!cur || !cur.bio || cur.name !== track.artist) {
-        const bio = await model.artistBio(track.artist).catch(() => "");
-        if (bio) {
-          setState((s) => ({
-            ...s,
-            playerArtist: {
-              name: (s.playerArtist && s.playerArtist.name) || track.artist,
-              image: (s.playerArtist && s.playerArtist.image) || track.artwork || "",
-              bio,
-            },
-          }));
-        }
-      }
     }
 
     function openPlayer(artist) {

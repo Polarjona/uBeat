@@ -8,3 +8,7 @@ arranque.log
 server-debug.log
 node_modules/
 .env
+# Salida del script de alineación de previews (dato derivado; la fuente de
+# verdad es la colección Firestore `preview_offsets`, subida con
+# node scripts/guardar-offsets.js)
+scripts/preview-offsets.json

@@ -1964,55 +1964,77 @@ app.get("/api/artists/preview", async (req, res) => {
   }
 });
 
-// GET /api/artists/bio?name=Queen → biografía del artista (TheAudioDB).
-// La catálogo no guarda bio, así que la pedimos bajo demanda para el
-// reproductor completo. Se cachea en memoria: la bio de un artista no
-// cambia y así evitamos martillear a TheAudioDB.
-const BIO_CACHE = new Map(); // nombre(mayúsculas) → { bio, exp }
-app.get("/api/artists/bio", async (req, res) => {
-  try {
-    const name = (req.query.name || "").trim();
-    if (!name) return res.status(400).json({ ok: false, error: "Falta ?name=" });
-    const key = name.toLowerCase();
-    const cached = BIO_CACHE.get(key);
-    if (cached && cached.exp > Date.now())
-      return res.json({ ok: true, bio: cached.bio });
-    const url = `https://www.theaudiodb.com/api/v1/json/123/search.php?s=${encodeURIComponent(name)}`;
-    const r = await fetch(url);
-    let bio = "";
-    if (r.ok) {
-      const data = await r.json();
-      const a = (data.artists || []).find((x) => similar(x.strArtist, name)) || null;
-      // Preferimos español; si no, inglés.
-      bio = (a && (a.strBiographyES || a.strBiographyEN)) || "";
-    }
-    BIO_CACHE.set(key, { bio, exp: Date.now() + 24 * 60 * 60 * 1000 });
-    res.json({ ok: true, bio });
-  } catch (err) {
-    res.json({ ok: true, bio: "", error: err.message });
-  }
-});
-
 // Letra sincronizada (LRCLIB, sin claves). Proxy para evitar CORS.
-// GET /api/lyrics?artist=&title=&album=&duration=
+// GET /api/lyrics?artist=&title=&album=&duration=&trackId=
+// Con ?trackId= devuelve además `previewOffset` (segundo de la canción
+// completa donde empieza esa preview) si lo calculamos offline; la respuesta
+// también puede traer `cooled: true` cuando LRCLIB está limitado.
 // LRCLIB pide un User-Agent identificativo; sin él responde 429. Además
 // aplica rate-limit de forma intermitente, así que: (1) cacheamos los
 // aciertos en memoria para no repetir llamadas y (2) reintentamos con
 // espera corta cuando nos llega un 429.
+// Ojo: /api/get y /api/search solo devuelven algo con coincidencia
+// EXACTA de album/duration, y la duración de nuestro catálogo casi
+// nunca coincide con la de LRCLIB, por lo que encadenamos intentos cada
+// vez más tolerantes hasta encontrar letra.
 const LRCLIB_UA = "uBeat/1.0 (https://github.com/Polarjona/uBeat)";
 const LRCLIB_CACHE = new Map(); // clave → { lyrics, exp }
 const LRCLIB_CACHE_TTL = 60 * 60 * 1000; // 1 h
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Tras un 429 persistente, dejamos de martillear a LRCLIB durante unos
+// segundos: si no, la cadena de fallback multiplicaría las peticiones y
+// alargaríamos el rate-limit.
+let LRCLIB_COOLDOWN = 0; // timestamp hasta el que no volvemos a llamar
 
 async function lrclibFetch(url) {
-  // Reintenta en 429 hasta 2 veces con espera creciente.
+  // En enfriamiento directamente no llamamos (evita encadenar intentos
+  // que solo empeoran el rate-limit).
+  if (Date.now() < LRCLIB_COOLDOWN) return null;
+  // Reintenta una vez con espera corta ante rate-limit (429) o avería
+  // puntual (5xx): si no, un 503 se colaría como "sin letra" y lo
+  // cachearíamos 10 min por error.
   for (let attempt = 0; ; attempt += 1) {
     const r = await fetch(url, {
       headers: { Accept: "application/json", "User-Agent": LRCLIB_UA },
     });
-    if (r.status !== 429 || attempt >= 2) return r;
-    await sleep(800 * (attempt + 1));
+    if (r.status !== 429 && r.status < 500) return r;
+    if (attempt >= 1) {
+      LRCLIB_COOLDOWN = Date.now() + 20000; // 20 s de pausa global
+      return null;
+    }
+    await sleep(1200);
   }
+}
+
+// Offset de la preview dentro de la canción completa (segundos). Lo calcula
+// offline scripts/alinear-previews.py (ASR + letra de LRCLIB) y lo sube
+// scripts/guardar-offsets.js a la colección `preview_offsets` por trackId:
+// así sabemos si el sello cortó la preview en el estribillo y no en el 0:00.
+const PREVIEW_OFFSET_CACHE = new Map(); // trackId → { offset, exp }
+const PREVIEW_OFFSET_TTL = 60 * 60 * 1000; // 1 h (también cachea los que no existen)
+
+async function previewOffsetFor(trackId) {
+  if (!trackId || !firestoreReady) return null;
+  const hit = PREVIEW_OFFSET_CACHE.get(trackId);
+  if (hit && hit.exp > Date.now()) return hit.offset;
+  let offset = null;
+  try {
+    const d = await db.collection("preview_offsets").doc(String(trackId)).get();
+    if (d.exists && typeof d.data().offset === "number") offset = d.data().offset;
+  } catch (_) {
+    return null; // error puntual: sin caché para reintentar enseguida
+  }
+  PREVIEW_OFFSET_CACHE.set(trackId, { offset, exp: Date.now() + PREVIEW_OFFSET_TTL });
+  return offset;
+}
+
+// Adjunta el offset a la respuesta solo cuando hay letra sincronizada que
+// recortar/sincronizar (si no, no aporta nada y evitamos la lectura).
+async function conOffset(payload, trackId) {
+  if (!payload || !payload.syncedLyrics || !trackId) return payload;
+  const offset = await previewOffsetFor(trackId);
+  if (offset === null) return payload;
+  return { ...payload, previewOffset: offset };
 }
 
 app.get("/api/lyrics", async (req, res) => {
@@ -2023,55 +2045,79 @@ app.get("/api/lyrics", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Faltan ?artist= o ?title=" });
     const album = (req.query.album || "").trim();
     const duration = Number(req.query.duration) || 0;
+    const trackId = (req.query.trackId || "").trim();
 
     const cacheKey = `${artist}|${title}|${album}`.toLowerCase();
     const cached = LRCLIB_CACHE.get(cacheKey);
-    if (cached && cached.exp > Date.now()) return res.json(cached.lyrics);
+    if (cached && cached.exp > Date.now())
+      return res.json(await conOffset(cached.lyrics, trackId));
     // Limpieza ligera para que el Map no crezca sin control.
     if (LRCLIB_CACHE.size > 400) {
       for (const [k, v] of LRCLIB_CACHE) if (v.exp <= Date.now()) LRCLIB_CACHE.delete(k);
     }
 
-    // /api/get exige artist+title; /api/search es más tolerante como alternativa.
-    const params = new URLSearchParams({ artist, title });
-    if (album) params.set("album", album);
-    if (duration > 0) params.set("duration", String(Math.round(duration)));
+    const EMPTY = { ok: true, syncedLyrics: null, plainLyrics: null };
 
-    const r = await lrclibFetch(`https://lrclib.net/api/get?${params.toString()}`);
+    // Devuelve la letra de una pista de LRCLIB o null si no tiene.
+    const pick = (d) =>
+      d && (d.syncedLyrics || d.plainLyrics)
+        ? { ok: true, syncedLyrics: d.syncedLyrics || null, plainLyrics: d.plainLyrics || null }
+        : null;
+
+    // 1) /api/get con todos los datos (coincidencia exacta del catálogo LRCLIB).
     let payload = null;
-    if (r.ok) {
-      const data = await r.json();
-      payload = {
-        ok: true,
-        syncedLyrics: data.syncedLyrics || null,
-        plainLyrics: data.plainLyrics || null,
-      };
-    } else {
-      // 404 (sin coincidencia exacta) o 429 (limitado): buscamos la más parecida.
+    let cooled = false; // true → LRCLIB limitado: cortamos la cadena
+    if (album || duration > 0) {
+      const p = new URLSearchParams({ artist, title });
+      if (album) p.set("album", album);
+      if (duration > 0) p.set("duration", String(Math.round(duration)));
+      const r = await lrclibFetch(`https://lrclib.net/api/get?${p.toString()}`);
+      if (r && r.ok) payload = pick(await r.json());
+      else if (!r) cooled = true;
+    }
+    // 2) /api/get solo con artista+título (la duración/álbum de nuestro
+    //    catálogo casi nunca coincide con el de LRCLIB).
+    if (!payload && !cooled) {
+      const r = await lrclibFetch(
+        `https://lrclib.net/api/get?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`
+      );
+      if (r && r.ok) payload = pick(await r.json());
+      else if (!r) cooled = true;
+    }
+    // 3) /api/search por artista+título y elegir la mejor (con letra
+    //    sincronizada si hay varias versiones).
+    if (!payload && !cooled) {
       const s = await lrclibFetch(
         `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}` +
-          `&artist_name=${encodeURIComponent(artist)}` +
-          (album ? `&album_name=${encodeURIComponent(album)}` : "") +
-          (duration > 0 ? `&duration=${Math.round(duration)}` : "")
+          `&artist_name=${encodeURIComponent(artist)}`
       );
-      if (s.ok) {
+      if (s && s.ok) {
         const list = await s.json();
         const arr = Array.isArray(list) ? list : [];
-        const hit = arr.find((x) => x.syncedLyrics) || arr[0] || null;
-        payload = {
-          ok: true,
-          syncedLyrics: hit ? hit.syncedLyrics || null : null,
-          plainLyrics: hit ? hit.plainLyrics || null : null,
-        };
-      }
+        // Preferimos coincidencia exacta de título y con letra sincronizada.
+        const exact = arr.filter(
+          (x) =>
+            (x.trackName || "").toLowerCase().trim() === title.toLowerCase().trim()
+        );
+        const hit =
+          exact.find((x) => x.syncedLyrics) ||
+          arr.find((x) => x.syncedLyrics) ||
+          exact[0] ||
+          arr[0] ||
+          null;
+        payload = pick(hit);
+      } else if (!s) cooled = true;
     }
     // Si LRCLIB sigue limitado no cacheamos (para reintentar luego);
-    // si hubo resultado (aunque sea "sin letra") lo guardamos.
+    // si hubo resultado lo guardamos, y el "sin letra" con TTL corto
+    // (10 min) para no repetir 3 peticiones en cada reproducción.
+    if (cooled) return res.json({ ...EMPTY, cooled: true });
     if (payload) {
       LRCLIB_CACHE.set(cacheKey, { lyrics: payload, exp: Date.now() + LRCLIB_CACHE_TTL });
-      return res.json(payload);
+      return res.json(await conOffset(payload, trackId));
     }
-    res.json({ ok: true, syncedLyrics: null, plainLyrics: null });
+    LRCLIB_CACHE.set(cacheKey, { lyrics: EMPTY, exp: Date.now() + 10 * 60 * 1000 });
+    res.json(EMPTY);
   } catch (err) {
     // Nunca rompemos el reproductor por falta de letra.
     res.json({ ok: true, syncedLyrics: null, plainLyrics: null, error: err.message });

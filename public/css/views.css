@@ -1006,8 +1006,8 @@
 .ps-close:hover { background: rgba(255, 255, 255, 0.18); transform: scale(1.05); }
 .ps-close svg { width: 15px; height: 15px; fill: currentColor; }
 
-/* Rejilla: columna izquierda (portada + biografía) y derecha (barra de
-   reproductor + letra grande), como el mockup. */
+/* Rejilla: columna izquierda (portada) y derecha (barra de reproductor
+   + letra grande), como el mockup. */
 .ps-grid {
   flex: 1;
   min-height: 0;
@@ -1034,21 +1034,23 @@
   flex-direction: column;
   min-height: 0;
   gap: 18px;
-  /* Reparte el alto entre portada y biografía sin desbordar. */
   grid-row: 1;
 }
 
-/* Portada del álbum (arriba, cuadrada). */
+/* Portada del álbum: ocupa toda la columna izquierda. */
 .ps-cover-card {
   padding: 14px;
-  flex-shrink: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .ps-cover {
-  width: min(100%, 42vh);
-  aspect-ratio: 1 / 1;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   object-fit: cover;
   display: block;
-  margin: 0 auto;
   border-radius: 16px;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
 }
@@ -1060,35 +1062,9 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.ps-track-artist { color: var(--muted); font-weight: 600; font-size: 13.5px; margin: 0 2px; }
-
-/* Biografía del artista (debajo, con scroll). */
-.ps-bio-card {
-  flex: 1;
-  min-height: 0;
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-}
-.ps-bio-label {
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent-2);
-  margin: 0 0 8px;
   flex-shrink: 0;
 }
-.ps-bio-scroll {
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1;
-  padding-right: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scroll) transparent;
-}
-.ps-bio { color: var(--muted); line-height: 1.7; font-size: 13.5px; margin: 0; }
+.ps-track-artist { color: var(--muted); font-weight: 600; font-size: 13.5px; margin: 0 2px; flex-shrink: 0; }
 
 /* Columna derecha. */
 .ps-right {
@@ -1215,10 +1191,9 @@
 
 @media (max-width: 860px) {
   .ps-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; padding-top: 64px; gap: 12px; }
-  .ps-cover-card { display: flex; align-items: center; gap: 12px; padding: 10px; }
-  .ps-cover { width: 64px; height: 64px; aspect-ratio: auto; border-radius: 10px; margin: 0; }
+  .ps-cover-card { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px; }
+  .ps-cover { flex: none; width: 64px; height: 64px; border-radius: 10px; }
   .ps-track-name { margin-top: 0; font-size: 16px; }
-  .ps-bio-card { display: none; }
   .ps-lyrics .lyric-line { font-size: 18px; }
   .ps-apple { padding: 8px 12px; font-size: 11px; }
 }

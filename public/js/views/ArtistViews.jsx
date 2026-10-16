@@ -2533,6 +2533,11 @@ window.ArtistaViews = (function () {
     const [style, setStyle] = useState(null);
     const [img, setImg] = useState(artist.image || (track && track.artwork) || "");
     const lineRefs = useRef([]);
+    // La portada debe seguir a la pista: la cola avanza sola al terminar
+    // la preview y, sin esto, quedaría la carátula anterior.
+    useEffect(() => {
+      setImg((track && track.artwork) || artist.image || "");
+    }, [track, artist]);
     // La animación de expansión dura ~420 ms; hasta entonces el panel aún
     // está creciendo y cualquier cálculo de centrado quedaría desfasado.
     const openedRef = useRef(false);
@@ -2616,7 +2621,16 @@ window.ArtistaViews = (function () {
       if (a && a.duration) a.currentTime = v * a.duration;
     };
 
-    // Parseo LRC de LRCLIB: [mm:ss.xx]texto → [{time, text}]
+    // La letra sincronizada cubre la canción completa (~4 min), pero el
+    // audio es una preview de 30 s. Esa preview no siempre empieza en el
+    // segundo 0 de la canción (cada sello corta donde quiere: a veces el
+    // estribillo): el servidor calcula ese desplazamiento por ASR y lo
+    // devuelve en previewOffset. Recortamos la letra a la ventana que de
+    // verdad suena y la sincronizamos 1:1, sin escalados: canción =
+    // tiempo de la preview + offset.
+    const offset =
+      lyrics && typeof lyrics.previewOffset === "number" ? lyrics.previewOffset : 0;
+    const previewEnd = offset + (dur || 30);
     const lines = React.useMemo(() => {
       if (!lyrics) return [];
       // Preferimos la letra sincronizada; si no, mostramos la simple.
@@ -2627,34 +2641,26 @@ window.ArtistaViews = (function () {
         const m = l.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
         if (m) {
           const text = m[3].trim();
-          if (text) out.push({ time: Number(m[1]) * 60 + Number(m[2]), text });
+          const time = Number(m[1]) * 60 + Number(m[2]);
+          // Recorte a la ventana de la preview (con 5 s de margen para ver
+          // la siguiente línea entrando). Si la preview es el estribillo,
+          // el primer verso (que suena antes) no se muestra.
+          if (text && time >= offset - 5 && time <= previewEnd + 5)
+            out.push({ time, text });
           return;
         }
         const text = l.trim();
         if (text) out.push({ time: null, text });
       });
       return out;
-    }, [lyrics]);
+    }, [lyrics, previewEnd, offset]);
 
-    // Sincronización letra ↔ preview: la letra cubre la canción entera
-    // (~4 min) pero el audio es una preview de 30 s. Escalamos los
-    // timestamps proporcionalmente para que toda la letra se recorra
-    // durante la preview, terminando justo con el audio (como hacen
-    // otros reproductores con previews).
-    const lyricSpan = React.useMemo(() => {
-      for (let i = lines.length - 1; i >= 0; i -= 1) {
-        if (lines[i].time !== null) return lines[i].time;
-      }
-      return 0;
-    }, [lines]);
-    const syncTime =
-      dur > 0 && lyricSpan > dur + 1 ? curTime * (lyricSpan / dur) : curTime;
-
-    // Línea activa según el tiempo actual (si las líneas llevan tiempo).
+    // Línea activa: sincronía directa 1:1 (tiempo de la canción = preview
+    // + offset) con el audio.
     let active = -1;
     if (lines.length && lines[0].time !== null) {
       for (let i = 0; i < lines.length; i += 1) {
-        if (lines[i].time <= syncTime + 0.2) active = i;
+        if (lines[i].time <= curTime + offset + 0.2) active = i;
         else break;
       }
     }
@@ -2732,7 +2738,7 @@ window.ArtistaViews = (function () {
           ) : null}
 
           <div className="ps-grid">
-            {/* Columna izquierda: portada del álbum + biografía */}
+            {/* Columna izquierda: portada del álbum a toda altura */}
             <section className="ps-left">
               <div className="ps-panel ps-cover-card">
                 <img
@@ -2743,14 +2749,6 @@ window.ArtistaViews = (function () {
                 />
                 <p className="ps-track-name">{track ? track.track : ""}</p>
                 <p className="ps-track-artist">{artist.name}</p>
-              </div>
-              <div className="ps-panel ps-bio-card">
-                <p className="ps-bio-label">Biografía · {artist.name}</p>
-                <div className="ps-bio-scroll">
-                  <p className="ps-bio">
-                    {artist.bio || "Sin biografía disponible para este artista."}
-                  </p>
-                </div>
               </div>
             </section>
 
@@ -2822,6 +2820,12 @@ window.ArtistaViews = (function () {
                     ))
                   ) : loadingLyrics ? (
                     <p className="muted ps-lyrics-note">Cargando letra…</p>
+                  ) : lyrics && lyrics.syncedLyrics ? (
+                    <p className="muted ps-lyrics-note">
+                      {offset > 0
+                        ? "La preview de esta canción no cae en ninguna parte con letra (es instrumental en ese tramo)."
+                        : "La canción tiene letra, pero empieza pasados los primeros 30 s (la preview no llega hasta ella)."}
+                    </p>
                   ) : (
                     <p className="muted ps-lyrics-note">
                       No hay letra sincronizada disponible para esta canción.
