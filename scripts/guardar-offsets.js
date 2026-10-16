@@ -1,13 +1,19 @@
 /**
- * Sube scripts/preview-offsets.json a Firestore (colección `preview_offsets`,
- * un documento por trackId) para que /api/lyrics devuelva `previewOffset`.
+ * Sube un JSON de offsets a Firestore (colección `preview_offsets`, un
+ * documento por trackId) para que /api/lyrics devuelva `previewOffset`.
  *
  * El JSON lo genera el script de ASR: python scripts/alinear-previews.py
+ * (usa --salida para trabajar en paralelo; luego --fichero aquí para subir
+ * cada worker o el fichero principal).
  *
  * Uso:
  *   node scripts/guardar-offsets.js            # sube los que falten
  *   node scripts/guardar-offsets.js --fuerza   # recalcula también los existentes
  *   node scripts/guardar-offsets.js --limite 50
+ *   node scripts/guardar-offsets.js --fichero ruta/workers-a.json
+ *
+ * Al subir, borra los documentos equivalentes de `preview_offsets_pending`
+ * (la cola que el servidor va apuntando cuando falta un offset).
  */
 const fs = require("fs");
 const path = require("path");
@@ -19,18 +25,21 @@ initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
 const COL = "preview_offsets";
-const FICHERO = path.join(__dirname, "preview-offsets.json");
+const PEND_COL = "preview_offsets_pending";
+const FICHERO_DEFECTO = path.join(__dirname, "preview-offsets.json");
 
 async function main() {
   const fuerza = process.argv.includes("--fuerza");
   const li = process.argv.indexOf("--limite");
   const limite = li >= 0 ? Number(process.argv[li + 1]) || 0 : 0;
+  const fi = process.argv.indexOf("--fichero");
+  const fichero = fi >= 0 && process.argv[fi + 1] ? process.argv[fi + 1] : FICHERO_DEFECTO;
 
-  if (!fs.existsSync(FICHERO)) {
-    console.error(`No existe ${FICHERO}. Ejecuta antes: python scripts/alinear-previews.py`);
+  if (!fs.existsSync(fichero)) {
+    console.error(`No existe ${fichero}. Ejecuta antes: python scripts/alinear-previews.py`);
     process.exit(1);
   }
-  const tabla = JSON.parse(fs.readFileSync(FICHERO, "utf8"));
+  const tabla = JSON.parse(fs.readFileSync(fichero, "utf8"));
   let filas = Object.values(tabla);
   if (limite > 0) filas = filas.slice(0, limite);
   if (!filas.length) {
@@ -80,7 +89,18 @@ async function main() {
     subidos += lote.length;
     console.log(`  lote ${Math.floor(i / CHUNK) + 1}: ${lote.length} documentos`);
   }
-  console.log(`Listo: ${subidos} offsets en la colección "${COL}".`);
+
+  // La cola de pendientes ya no hace falta para estas pistas.
+  let borrados = 0;
+  for (let i = 0; i < pendientes.length; i += CHUNK) {
+    const batch = db.batch();
+    pendientes.slice(i, i + CHUNK).forEach((f) => {
+      batch.delete(db.collection(PEND_COL).doc(String(f.trackId)));
+    });
+    await batch.commit();
+    borrados += Math.min(CHUNK, pendientes.length - i);
+  }
+  console.log(`Listo: ${subidos} offsets en "${COL}", ${borrados} pendientes limpiados.`);
 }
 
 main().catch((err) => {

@@ -285,15 +285,16 @@ def pistas_de_artista(nombre, base):
     return data.get("tracks") or []
 
 
-def cargar_catalogo(base, limite):
+def cargar_catalogo(base, limite, desde=0):
     data = http_json(f"{base}/api/artists")
     if not data or not data.get("ok"):
         print("!! No puedo leer el catálogo del servidor local.")
         return []
     nombres = [a.get("name") for a in data.get("artists") or [] if a.get("name")]
+    nombres = nombres[desde:]
     if limite > 0:
         nombres = nombres[:limite]
-    print(f"Catálogo: {len(nombres)} artistas")
+    print(f"Catálogo: {len(nombres)} artistas (desde {desde})")
     todas = []
     for i, nombre in enumerate(nombres, 1):
         tr = pistas_de_artista(nombre, base)
@@ -310,18 +311,36 @@ def cargar_archivo(ruta):
     return datos
 
 
-def leer_salida():
-    if os.path.exists(SALIDA):
-        with open(SALIDA, encoding="utf-8") as f:
+def leer_salida(ruta=SALIDA):
+    if os.path.exists(ruta):
+        with open(ruta, encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
-def guardar_salida(tabla):
-    tmp = SALIDA + ".tmp"
+def guardar_salida(tabla, ruta=SALIDA):
+    tmp = ruta + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(tabla, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, SALIDA)
+    os.replace(tmp, ruta)
+
+
+def rellenar_desde_itunes(track):
+    """Pistas de la cola de pendientes: sin previewUrl, la traemos de iTunes."""
+    tid = track.get("trackId")
+    if not tid or track.get("previewUrl"):
+        return track
+    data = http_json(f"https://itunes.apple.com/lookup?id={tid}&country=ES")
+    r = (data or {}).get("results") or []
+    if not r:
+        return track
+    t = r[0]
+    track["previewUrl"] = t.get("previewUrl") or ""
+    track["track"] = track.get("track") or t.get("trackName") or ""
+    track["artist"] = track.get("artist") or t.get("artistName") or ""
+    track["album"] = track.get("album") or t.get("collectionName") or ""
+    track["durationMs"] = track.get("durationMs") or t.get("trackTimeMillis") or 0
+    return track
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +348,9 @@ def main():
     ap = argparse.ArgumentParser(description="Calcula el offset de preview por ASR")
     ap.add_argument("--artista", action="append", default=[], help="artista (repetible)")
     ap.add_argument("--archivo", help="JSON con la lista de pistas")
-    ap.add_argument("--limite", type=int, default=0, help="N primeros artistas del catálogo")
+    ap.add_argument("--limite", type=int, default=0, help="N artistas del catálogo (tras --desde)")
+    ap.add_argument("--desde", type=int, default=0, help="saltar los N primeros artistas del catálogo")
+    ap.add_argument("--salida", default=SALIDA, help="fichero de salida (trabajos en paralelo)")
     ap.add_argument("--modelo", default="base", help="whisper: base (defecto), tiny, small…")
     ap.add_argument("--idioma", default=None, help="forzar idioma (en, es…); autodetección si se omite")
     ap.add_argument("--servidor", default=SERVIDOR)
@@ -343,14 +364,22 @@ def main():
         for nombre in args.artista:
             pistas.extend(pistas_de_artista(nombre, args.servidor))
     else:
-        pistas = cargar_catalogo(args.servidor, args.limite)
+        pistas = cargar_catalogo(args.servidor, args.limite, args.desde)
     if not pistas:
         print("No hay pistas que procesar.")
         return
 
-    # Sin trackId no hay dónde guardar el offset.
-    pistas = [p for p in pistas if p.get("trackId") and p.get("previewUrl")]
-    ya = leer_salida()
+    # Sin trackId no hay dónde guardar el offset. Sin previewUrl (pistas de
+    # la cola de pendientes) la traemos de iTunes por su id.
+    pistas = [p for p in pistas if p.get("trackId")]
+    pistas = [rellenar_desde_itunes(p) for p in pistas]
+    pistas = [p for p in pistas if p.get("previewUrl")]
+    salida = args.salida
+    ya = leer_salida(salida)
+    if salida != SALIDA:
+        # Con trabajos en paralelo respetamos también el fichero principal.
+        for k, v in leer_salida(SALIDA).items():
+            ya.setdefault(k, v)
     if not args.reintentar:
         antes = len(pistas)
         pistas = [p for p in pistas if str(p["trackId"]) not in ya]
@@ -412,12 +441,12 @@ def main():
             "modelo": args.modelo,
             "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
-        guardar_salida(ya)  # guardado incremental: se puede cortar en cualquier momento
+        guardar_salida(ya, salida)  # guardado incremental: se puede cortar en cualquier momento
         ok += 1
         print(f"    offset = {r['offset']} s (confianza {r['confidence']}, {r['votes']} votos)")
 
     print(f"\nListo: {ok} offsets nuevos, {fallos} descartados, {sin_letra} sin letra.")
-    print(f"Guardado en {SALIDA}")
+    print(f"Guardado en {salida}")
     print("Siguiente paso: node scripts/guardar-offsets.js")
 
 

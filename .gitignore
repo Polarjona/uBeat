@@ -12,3 +12,6 @@ node_modules/
 # verdad es la colección Firestore `preview_offsets`, subida con
 # node scripts/guardar-offsets.js)
 scripts/preview-offsets.json
+scripts/preview-pendientes.json
+scripts/catalogo-previews.json
+scripts/workers-*.json

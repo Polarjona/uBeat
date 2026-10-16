@@ -86,19 +86,32 @@ Las previews de iTunes **no son siempre los primeros 30 s**: cada sello corta
 donde quiere (a veces directamente el estribillo). Para que la letra del
 reproductor caiga donde suena de verdad:
 
-1. `python scripts/alinear-previews.py [--artista "X"] [--limite N] [--archivo pistas.json] [--modelo base] [--reintentar]`
+1. `node scripts/enumerar-previews.js [--ritmo ms] [--reintentar]`
+   recorre el catálogo de artistas y recoge sus previews de iTunes **sin
+   agotar el rate-limit de Apple** (403 al martillearlo): va por el servidor
+   local con ~5 s por artista y reintentos con espera creciente. Escribe
+   `scripts/catalogo-previews.json` de forma incremental (resumible; con
+   `--reintentar` solo repite los artistas que fallaron).
+2. `python scripts/alinear-previews.py [--artista "X"] [--archivo pistas.json] [--desde N] [--limite N] [--salida fichero.json] [--modelo base] [--reintentar]`
    descarga cada preview, la transcribe con **faster-whisper** (marca por
    palabra, sin claves ni ffmpeg: `pip install faster-whisper numpy`) y vota
    el segundo de la canción donde empieza la preview contra la letra de
    LRCLIB (la pide al servidor local, que debe estar corriendo). Los coros
    repetidos se desempatan ponderando más las primeras palabras y, a igual
    de fuerza, eligiendo la primera ocurrencia. Escribe de forma incremental
-   en `scripts/preview-offsets.json` (ignorado por git), así que se puede
-   cortar y reanudar.
-2. `node scripts/guardar-offsets.js [--fuerza] [--limite N]`
-   sube ese JSON a Firestore, colección **`preview_offsets`** (un documento
-   por `trackId`: `offset`, `confidence`, `votes`…). Requiere
-   `firebase-key.json`.
+   en `--salida` (por defecto `scripts/preview-offsets.json`, ignorado por
+   git), así que se puede cortar y reanudar; con `--desde`/`--salida`
+   varios trabajadores pueden repartirse el catálogo en paralelo sin pisarse
+   (todos respetan lo ya calculado en el fichero principal).
+   Para cubrir también canciones fuera del catálogo (búsquedas, favoritos…)
+   existe la cola automática: cuando `/api/lyrics` no tiene offset de una
+   pista, el servidor la apunta en `preview_offsets_pending`; se exporta con
+   `node scripts/exportar-pendientes.js` (→ `scripts/preview-pendientes.json`)
+   y se alinea igual con `--archivo`.
+3. `node scripts/guardar-offsets.js [--fuerza] [--limite N] [--fichero ruta.json]`
+   sube el JSON a Firestore, colección **`preview_offsets`** (un documento
+   por `trackId`: `offset`, `confidence`, `votes`…) y limpia los documentos
+   equivalentes de `preview_offsets_pending`. Requiere `firebase-key.json`.
 3. `GET /api/lyrics?…&trackId=` devuelve `previewOffset` (caché en memoria
    1 h) y el reproductor usa `canción = tiempo de la preview + offset` para
    recortar la letra a la ventana que suena y marcar la línea activa. Sin

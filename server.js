@@ -40,6 +40,7 @@ const SECRETS_PATH = path.join(__dirname, "secrets.json");
 let admin = null;
 let db = null;
 let firestoreReady = false;
+let FieldValue = null; // se asigna al conectar (increment en colas)
 
 function initFirebase() {
   try {
@@ -57,13 +58,14 @@ function initFirebase() {
       return;
     }
     admin = require("firebase-admin");
-    const { getFirestore } = require("firebase-admin/firestore");
+    const { getFirestore, FieldValue: FV } = require("firebase-admin/firestore");
     const credential =
       admin.credential && admin.credential.cert
         ? admin.credential.cert(serviceAccount)
         : admin.cert(serviceAccount);
     admin.initializeApp({ credential });
     db = getFirestore();
+    FieldValue = FV;
     firestoreReady = true;
     console.log("[API] Conectado a Firestore correctamente.");
   } catch (err) {
@@ -1606,6 +1608,35 @@ async function discoverArtists(uid) {
 
 // Devuelve un grupo de canciones POR artista (barrado dentro de cada uno),
 // para poder intercalarlos y no mostrar N previews seguidas del mismo.
+// iTunes Search limita por IP de forma agresiva (403 intermitentes al
+// martillearlo: el batch de offsets y la propia app comparten IP). Mitigamos:
+// (1) caché en memoria de las respuestas (12 h) — además precalienta la app
+// cuando un batch recorre el catálogo —, (2) un reintento rápido ante fallo
+// y (3) log del error para poder diagnosticar en vez de un 500 mudo.
+const ITUNES_CACHE = new Map(); // url → { data, exp }
+const ITUNES_CACHE_TTL = 12 * 60 * 60 * 1000;
+
+async function itunesJson(url) {
+  const hit = ITUNES_CACHE.get(url);
+  if (hit && hit.exp > Date.now()) return hit.data;
+  for (let intento = 0; intento < 2; intento++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`iTunes HTTP ${r.status}`);
+      const data = await r.json();
+      ITUNES_CACHE.set(url, { data, exp: Date.now() + ITUNES_CACHE_TTL });
+      return data;
+    } catch (err) {
+      if (intento === 0) {
+        await sleep(2500);
+        continue;
+      }
+      console.error(`[iTunes] ${err.message} → ${url}`);
+      throw err;
+    }
+  }
+}
+
 async function itunesPreviewGroups(artistNames) {
   const pages = await Promise.all(
     artistNames.map(async (name) => {
@@ -1613,9 +1644,7 @@ async function itunesPreviewGroups(artistNames) {
         const url =
           `https://itunes.apple.com/search?term=${encodeURIComponent(name)}` +
           `&entity=song&limit=5&country=ES`;
-        const r = await fetch(url);
-        if (!r.ok) return [];
-        const data = await r.json();
+        const data = await itunesJson(url);
         return shuffle(
           (data.results || [])
             .filter((t) => t.previewUrl)
@@ -1931,9 +1960,7 @@ app.get("/api/artists/preview", async (req, res) => {
     const url =
       `https://itunes.apple.com/search?term=${encodeURIComponent(artist)}` +
       `&entity=song&limit=25&country=ES`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`iTunes HTTP ${r.status}`);
-    const data = await r.json();
+    const data = await itunesJson(url);
     // iTunes devuelve canciones que solo contienen el nombre del artista en
     // el título; se descartan las de otros intérpretes para que la lista de
     // una ficha sea coherente (p. ej. "Shallow" en Queen).
@@ -2029,12 +2056,41 @@ async function previewOffsetFor(trackId) {
 }
 
 // Adjunta el offset a la respuesta solo cuando hay letra sincronizada que
-// recortar/sincronizar (si no, no aporta nada y evitamos la lectura).
-async function conOffset(payload, trackId) {
+// recortar/sincronizar (si no, no aporta nada y evitamos la lectura). Si el
+// offset aún no se conoce, apuntamos la pista en `preview_offsets_pending`
+// para que el próximo pase del script de alineación la calcule: la
+// cobertura crece sola con el uso real de la app.
+async function conOffset(payload, trackId, meta) {
   if (!payload || !payload.syncedLyrics || !trackId) return payload;
   const offset = await previewOffsetFor(trackId);
-  if (offset === null) return payload;
+  if (offset === null) {
+    encolarPendiente(trackId, meta);
+    return payload;
+  }
   return { ...payload, previewOffset: offset };
+}
+
+function encolarPendiente(trackId, meta) {
+  if (!firestoreReady || !meta) return;
+  try {
+    db.collection("preview_offsets_pending")
+      .doc(String(trackId))
+      .set(
+        {
+          trackId: String(trackId),
+          artist: meta.artist || "",
+          title: meta.title || "",
+          album: meta.album || "",
+          durationMs: Math.round((meta.duration || 0) * 1000),
+          misses: FieldValue.increment(1),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      )
+      .catch(() => {});
+  } catch (_) {
+    /* best-effort: nunca debe afectar a la respuesta */
+  }
 }
 
 app.get("/api/lyrics", async (req, res) => {
@@ -2046,11 +2102,12 @@ app.get("/api/lyrics", async (req, res) => {
     const album = (req.query.album || "").trim();
     const duration = Number(req.query.duration) || 0;
     const trackId = (req.query.trackId || "").trim();
+    const meta = { artist, title, album, duration };
 
     const cacheKey = `${artist}|${title}|${album}`.toLowerCase();
     const cached = LRCLIB_CACHE.get(cacheKey);
     if (cached && cached.exp > Date.now())
-      return res.json(await conOffset(cached.lyrics, trackId));
+      return res.json(await conOffset(cached.lyrics, trackId, meta));
     // Limpieza ligera para que el Map no crezca sin control.
     if (LRCLIB_CACHE.size > 400) {
       for (const [k, v] of LRCLIB_CACHE) if (v.exp <= Date.now()) LRCLIB_CACHE.delete(k);
@@ -2064,29 +2121,15 @@ app.get("/api/lyrics", async (req, res) => {
         ? { ok: true, syncedLyrics: d.syncedLyrics || null, plainLyrics: d.plainLyrics || null }
         : null;
 
-    // 1) /api/get con todos los datos (coincidencia exacta del catálogo LRCLIB).
+    // Cadena de fallbacks. Empezamos por /api/search: en la práctica es el
+    // único que encuentra letra hoy (/api/get devuelve 400 salvo coincidencia
+    // exacta total) y cuesta UNA llamada por pista, que importa al alinear
+    // miles de previews con el script de ASR.
     let payload = null;
     let cooled = false; // true → LRCLIB limitado: cortamos la cadena
-    if (album || duration > 0) {
-      const p = new URLSearchParams({ artist, title });
-      if (album) p.set("album", album);
-      if (duration > 0) p.set("duration", String(Math.round(duration)));
-      const r = await lrclibFetch(`https://lrclib.net/api/get?${p.toString()}`);
-      if (r && r.ok) payload = pick(await r.json());
-      else if (!r) cooled = true;
-    }
-    // 2) /api/get solo con artista+título (la duración/álbum de nuestro
-    //    catálogo casi nunca coincide con el de LRCLIB).
-    if (!payload && !cooled) {
-      const r = await lrclibFetch(
-        `https://lrclib.net/api/get?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`
-      );
-      if (r && r.ok) payload = pick(await r.json());
-      else if (!r) cooled = true;
-    }
-    // 3) /api/search por artista+título y elegir la mejor (con letra
+    // 1) /api/search por artista+título y elegir la mejor (con letra
     //    sincronizada si hay varias versiones).
-    if (!payload && !cooled) {
+    {
       const s = await lrclibFetch(
         `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}` +
           `&artist_name=${encodeURIComponent(artist)}`
@@ -2108,13 +2151,31 @@ app.get("/api/lyrics", async (req, res) => {
         payload = pick(hit);
       } else if (!s) cooled = true;
     }
+    // 2) /api/get con todos los datos (coincidencia exacta del catálogo LRCLIB).
+    if (!payload && !cooled && (album || duration > 0)) {
+      const p = new URLSearchParams({ artist, title });
+      if (album) p.set("album", album);
+      if (duration > 0) p.set("duration", String(Math.round(duration)));
+      const r = await lrclibFetch(`https://lrclib.net/api/get?${p.toString()}`);
+      if (r && r.ok) payload = pick(await r.json());
+      else if (!r) cooled = true;
+    }
+    // 3) /api/get solo con artista+título (la duración/álbum de nuestro
+    //    catálogo casi nunca coincide con el de LRCLIB).
+    if (!payload && !cooled) {
+      const r = await lrclibFetch(
+        `https://lrclib.net/api/get?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`
+      );
+      if (r && r.ok) payload = pick(await r.json());
+      else if (!r) cooled = true;
+    }
     // Si LRCLIB sigue limitado no cacheamos (para reintentar luego);
     // si hubo resultado lo guardamos, y el "sin letra" con TTL corto
     // (10 min) para no repetir 3 peticiones en cada reproducción.
     if (cooled) return res.json({ ...EMPTY, cooled: true });
     if (payload) {
       LRCLIB_CACHE.set(cacheKey, { lyrics: payload, exp: Date.now() + LRCLIB_CACHE_TTL });
-      return res.json(await conOffset(payload, trackId));
+      return res.json(await conOffset(payload, trackId, meta));
     }
     LRCLIB_CACHE.set(cacheKey, { lyrics: EMPTY, exp: Date.now() + 10 * 60 * 1000 });
     res.json(EMPTY);
