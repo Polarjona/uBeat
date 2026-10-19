@@ -39,6 +39,15 @@ import urllib.request
 
 import numpy as np
 
+# Windows redirige la salida a cp1252: un título japonés, turco o cirílico
+# imprimible reventaba el worker con UnicodeEncodeError (mató a varios
+# trabajadores en mitad del batch). Forzamos UTF-8 con '?' de reemplazo.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 - sin reconfigure seguimos igual
+        pass
+
 # ---------------------------------------------------------------------------
 # Ajustes
 # ---------------------------------------------------------------------------
