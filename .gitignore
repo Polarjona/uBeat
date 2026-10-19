@@ -16,3 +16,4 @@ scripts/preview-pendientes.json
 scripts/catalogo-previews.json
 scripts/workers-*.json
 scripts/trabajos-*.json
+logs/
