@@ -2012,11 +2012,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // segundos: si no, la cadena de fallback multiplicaría las peticiones y
 // alargaríamos el rate-limit.
 let LRCLIB_COOLDOWN = 0; // timestamp hasta el que no volvemos a llamar
+let LRCLIB_NEXT = 0; // próxima salida permitida a LRCLIB (rate suave)
+const LRCLIB_MIN_GAP = 1000; // ms mínimos entre peticiones salientes
 
 async function lrclibFetch(url) {
   // En enfriamiento directamente no llamamos (evita encadenar intentos
   // que solo empeoran el rate-limit).
   if (Date.now() < LRCLIB_COOLDOWN) return null;
+  // Espaciamos las SALIDAS a LRCLIB: limita por ráfagas y un 429 nos cuesta
+  // 20 s de enfriamiento global (muy peor que esperar un segundo aquí).
+  // El hueco se reserva de forma síncrona para que las peticiones
+  // concurrentes (varios trabajadores o varios usuarios) no se solapen.
+  const ahora = Date.now();
+  const salida = Math.max(ahora, LRCLIB_NEXT);
+  LRCLIB_NEXT = salida + LRCLIB_MIN_GAP;
+  if (salida > ahora) await sleep(salida - ahora);
+  if (Date.now() < LRCLIB_COOLDOWN) return null; // entró un enfriamiento mientras esperábamos
   // Reintenta una vez con espera corta ante rate-limit (429) o avería
   // puntual (5xx): si no, un 503 se colaría como "sin letra" y lo
   // cachearíamos 10 min por error.
@@ -2027,6 +2038,7 @@ async function lrclibFetch(url) {
     if (r.status !== 429 && r.status < 500) return r;
     if (attempt >= 1) {
       LRCLIB_COOLDOWN = Date.now() + 20000; // 20 s de pausa global
+      console.error(`[LRCLIB] ${r.status} tras reintento → enfriamiento 20 s (${url})`);
       return null;
     }
     await sleep(1200);

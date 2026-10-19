@@ -320,9 +320,19 @@ def leer_salida(ruta=SALIDA):
 
 def guardar_salida(tabla, ruta=SALIDA):
     tmp = ruta + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(tabla, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, ruta)
+    # Windows: el antivirus o el índice pueden bloquear el fichero un
+    # instante y os.replace lanza PermissionError; reintentamos antes de
+    # rendirnos (los datos siguen en memoria, el siguiente track vuelve a
+    # intentar la escritura igualmente).
+    for intento in range(6):
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(tabla, f, ensure_ascii=False, indent=1)
+            os.replace(tmp, ruta)
+            return
+        except PermissionError:
+            time.sleep(0.4 * (intento + 1))
+    print("  ! no puedo escribir " + ruta + " (bloqueado), se reintenta en el próximo track")
 
 
 def rellenar_desde_itunes(track):
