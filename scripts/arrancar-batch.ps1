@@ -37,8 +37,17 @@ $existentes = @(Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
   Where-Object { $_.CommandLine -like "*alinear-previews*" })
 foreach ($w in @("a", "b", "c", "d")) {
   $enMarcha = $existentes | Where-Object { $_.CommandLine -like "*trabajos-$w.json*" }
+  # "Siguiente paso:" es la última línea del log cuando el worker TERMINÓ:
+  # no lo relanzamos (reintentaría sus descartes cada 20 min y saturaría
+  # LRCLIB; los pendientes reales los procesa exportar-pendientes.js).
+  $logFinal = Join-Path $logs "worker-$w.log"
+  $terminado = (Test-Path $logFinal) -and ((Get-Content $logFinal -Tail 1 -ErrorAction SilentlyContinue) -like "Siguiente paso*")
   if ($enMarcha) {
     Write-Output "worker ${w}: ya corria (PID $($enMarcha.ProcessId))"
+    continue
+  }
+  if ($terminado) {
+    Write-Output "worker ${w}: ya completado, no se relanza"
     continue
   }
   Start-Process -FilePath $python `

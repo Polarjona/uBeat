@@ -776,7 +776,9 @@
         setState((s) => ({ ...s, playerLyrics: null, playerLoadingLyrics: false, playerAppleUrl: "" }));
         return;
       }
-      setState((s) => ({ ...s, playerLoadingLyrics: true }));
+      // Limpiamos la letra y el enlace ANTES de descargar: si no, al avanzar
+      // la cola se ve la letra de la pista anterior mientras LRCLIB responde.
+      setState((s) => ({ ...s, playerLyrics: null, playerLoadingLyrics: true, playerAppleUrl: "" }));
       const [ly, url] = await Promise.all([
         model
           .lyrics({
@@ -799,6 +801,10 @@
           .catch(() => ({ syncedLyrics: null, plainLyrics: null })),
         model.itunesTrack(track.trackId).catch(() => null),
       ]);
+      // Guardia anti-carrera: si mientras esperábamos cambió la pista,
+      // esta respuesta ya no sirve (pintaría la letra de otra canción).
+      const actual = getState().barQueue[getState().barIdx];
+      if (!actual || actual.trackId !== track.trackId) return;
       setState((s) => ({
         ...s,
         playerLyrics: ly,

@@ -2032,9 +2032,21 @@ async function lrclibFetch(url) {
   // puntual (5xx): si no, un 503 se colaría como "sin letra" y lo
   // cachearíamos 10 min por error.
   for (let attempt = 0; ; attempt += 1) {
-    const r = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": LRCLIB_UA },
-    });
+    let r;
+    try {
+      r = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": LRCLIB_UA },
+        // Sin timeout, un LRCLIB colgado acumula sockets hasta tumbar el
+        // servidor entero (los 503 actuales de su servicio).
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (e) {
+      // Timeout o red caída: como un 5xx, pero con enfriamiento más largo
+      // (un colgado rara vez se arregla en 1,2 s).
+      LRCLIB_COOLDOWN = Date.now() + 20000;
+      console.error(`[LRCLIB] fetch abortado (${e.name}) → enfriamiento 20 s (${url})`);
+      return null;
+    }
     if (r.status !== 429 && r.status < 500) return r;
     if (attempt >= 1) {
       LRCLIB_COOLDOWN = Date.now() + 20000; // 20 s de pausa global
