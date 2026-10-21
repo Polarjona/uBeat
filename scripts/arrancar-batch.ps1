@@ -50,6 +50,15 @@ foreach ($w in @("a", "b", "c", "d")) {
     Write-Output "worker ${w}: ya completado, no se relanza"
     continue
   }
+  # El redirect de Start-Process trunca el log: conservamos el de la corrida
+  # anterior para no perder el traceback si el worker muere y la tarea lo
+  # relanza (ha pasado varias veces y asi se puede investigar).
+  foreach ($suf in @(".err.log", ".log")) {
+    $viejo = Join-Path $logs "worker-$w$suf"
+    if ((Test-Path $viejo) -and (Get-Item $viejo).Length -gt 0) {
+      Move-Item $viejo (Join-Path $logs "worker-$w.prev$suf") -Force
+    }
+  }
   Start-Process -FilePath $python `
     -ArgumentList @(
       "-u", "scripts\alinear-previews.py",
