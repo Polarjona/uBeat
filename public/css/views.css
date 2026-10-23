@@ -1190,7 +1190,9 @@
 .detail-expand .crystal-btn { width: 100%; }
 
 @media (max-width: 860px) {
-  .ps-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; padding-top: 64px; gap: 12px; }
+  .ps-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); padding-top: 64px; gap: 12px; }
+  /* En escritorio ambos van en la fila 1 (columnas); aquí deben apilarse. */
+  .ps-left, .ps-right { grid-row: auto; }
   .ps-cover-card { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px; }
   .ps-cover { flex: none; width: 64px; height: 64px; border-radius: 10px; }
   .ps-track-name { margin-top: 0; font-size: 16px; }

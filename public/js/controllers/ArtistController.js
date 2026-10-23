@@ -726,25 +726,32 @@
       if (dir > 0 && next >= barQueue.length && s.barFromDiscover && s.discoverHasMore && !s.discoverLoading) {
         loadDiscover().then(() => {
           const st = getState();
+          const idx = st.barQueue.length > s.barIdx + 1 ? s.barIdx + 1 : 0;
           setState((x) => ({
             ...x,
-            barIdx: st.barQueue.length > s.barIdx + 1 ? s.barIdx + 1 : 0,
+            barIdx: idx,
             barPlaying: true,
           }));
+          if (st.playerOpen && st.barQueue[idx]) loadPlayerExtras(st.barQueue[idx]);
         });
         return;
       }
+      // Nota: getState() lee el último render (stateRef), así que justo tras
+      // el setState de arriba devuelve la pista ANTERIOR: pasamos la nueva
+      // explícitamente o la guardia anti-carrera rechazaría la letra.
+      const idx = (barIdx + dir + barQueue.length) % barQueue.length;
       setState((st) => ({
         ...st,
-        barIdx: (barIdx + dir + barQueue.length) % barQueue.length,
+        barIdx: idx,
         barPlaying: true,
       }));
-      onPlayerTrackChange();
+      if (getState().playerOpen) loadPlayerExtras(barQueue[idx]);
     }
 
     function barSelect(i) {
+      const track = getState().barQueue[i];
       setState((s) => ({ ...s, barIdx: i, barPlaying: true }));
-      onPlayerTrackChange();
+      if (getState().playerOpen && track) loadPlayerExtras(track);
     }
 
     function closeBar() {
@@ -779,38 +786,43 @@
       // Limpiamos la letra y el enlace ANTES de descargar: si no, al avanzar
       // la cola se ve la letra de la pista anterior mientras LRCLIB responde.
       setState((s) => ({ ...s, playerLyrics: null, playerLoadingLyrics: true, playerAppleUrl: "" }));
-      const [ly, url] = await Promise.all([
-        model
-          .lyrics({
-            artist: track.artist,
-            title: track.track,
-            album: track.album,
-            // LRCLIB espera la duración de la canción COMPLETA en segundos.
-            // El track de la cola lleva durationMs de la preview (30 s), que
-            // solo serviría si fuera la pista entera: no la usamos para no
-            // descuadrar el matching.
-            duration:
-              track.duration ||
-              (track.durationMs && track.durationMs > 60000
-                ? Math.round(track.durationMs / 1000)
-                : undefined),
-            // Para saber en qué segundo de la canción empieza esta preview
-            // (algunos sellos cortan el estribillo, no el inicio).
-            trackId: track.trackId,
-          })
-          .catch(() => ({ syncedLyrics: null, plainLyrics: null })),
-        model.itunesTrack(track.trackId).catch(() => null),
-      ]);
-      // Guardia anti-carrera: si mientras esperábamos cambió la pista,
-      // esta respuesta ya no sirve (pintaría la letra de otra canción).
-      const actual = getState().barQueue[getState().barIdx];
-      if (!actual || actual.trackId !== track.trackId) return;
-      setState((s) => ({
-        ...s,
-        playerLyrics: ly,
-        playerLoadingLyrics: false,
-        playerAppleUrl: url || "",
-      }));
+      // Descarga letra y enlace de Apple Music POR SEPARADO: la letra no
+      // debe esperar a la lookup de iTunes (sus 403 la retrasan segundos en
+      // cada pista nueva y el panel se queda en "Cargando letra…").
+      model
+        .lyrics({
+          artist: track.artist,
+          title: track.track,
+          album: track.album,
+          // LRCLIB espera la duración de la canción COMPLETA en segundos.
+          // El track de la cola lleva durationMs de la preview (30 s), que
+          // solo serviría si fuera la pista entera: no la usamos para no
+          // descuadrar el matching.
+          duration:
+            track.duration ||
+            (track.durationMs && track.durationMs > 60000
+              ? Math.round(track.durationMs / 1000)
+              : undefined),
+          // Para saber en qué segundo de la canción empieza esta preview
+          // (algunos sellos cortan el estribillo, no el inicio).
+          trackId: track.trackId,
+        })
+        .catch(() => ({ syncedLyrics: null, plainLyrics: null }))
+        .then((ly) => {
+          // Guardia anti-carrera: si mientras esperábamos cambió la pista,
+          // esta respuesta ya no sirve (pintaría la letra de otra canción).
+          const actual = getState().barQueue[getState().barIdx];
+          if (!actual || actual.trackId !== track.trackId) return;
+          setState((s) => ({ ...s, playerLyrics: ly, playerLoadingLyrics: false }));
+        });
+      model
+        .itunesTrack(track.trackId)
+        .catch(() => null)
+        .then((url) => {
+          const actual = getState().barQueue[getState().barIdx];
+          if (!actual || actual.trackId !== track.trackId) return;
+          setState((s) => ({ ...s, playerAppleUrl: url || "" }));
+        });
     }
 
     function openPlayer(artist) {
@@ -841,12 +853,6 @@
           })),
         420
       );
-    }
-
-    // Si cambia de pista con el reproductor abierto, recarga letra y enlace.
-    function onPlayerTrackChange() {
-      const s = getState();
-      if (s.playerOpen && s.barQueue[s.barIdx]) loadPlayerExtras(s.barQueue[s.barIdx]);
     }
 
     // ---- Cookies (3 booleanos: necesarias, sesión, preferencias) ----
@@ -1140,7 +1146,6 @@
       closeBar,
       openPlayer,
       closePlayer,
-      onPlayerTrackChange,
       loadPreview,
       setTrack,
       togglePlay,
