@@ -739,7 +739,11 @@
       // Nota: getState() lee el último render (stateRef), así que justo tras
       // el setState de arriba devuelve la pista ANTERIOR: pasamos la nueva
       // explícitamente o la guardia anti-carrera rechazaría la letra.
-      const idx = (barIdx + dir + barQueue.length) % barQueue.length;
+      let idx = (barIdx + dir + barQueue.length) % barQueue.length;
+      if (dir > 0 && s.barShuffle && barQueue.length > 1) {
+        do idx = Math.floor(Math.random() * barQueue.length);
+        while (idx === barIdx);
+      }
       setState((st) => ({
         ...st,
         barIdx: idx,
@@ -752,6 +756,33 @@
       const track = getState().barQueue[i];
       setState((s) => ({ ...s, barIdx: i, barPlaying: true }));
       if (getState().playerOpen && track) loadPlayerExtras(track);
+    }
+
+    function barToggleShuffle() {
+      setState((s) => ({ ...s, barShuffle: !s.barShuffle }));
+    }
+
+    function barCycleRepeat() {
+      setState((s) => ({
+        ...s,
+        barRepeat: s.barRepeat === "all" ? "one" : s.barRepeat === "one" ? "off" : "all",
+      }));
+    }
+
+    // Fin natural de la pista (audio.onEnded). "replay" le pide a la vista
+    // que reinicie la misma pista (repetir uno); el avance o la parada
+    // ("off" en la última pista) se resuelve aquí mismo.
+    function barEnd() {
+      const s = getState();
+      if (!s.barQueue.length) return undefined;
+      if (s.barRepeat === "one") return "replay";
+      const ultimo = s.barIdx >= s.barQueue.length - 1;
+      if (ultimo && s.barRepeat === "off" && !s.barShuffle) {
+        setState((x) => ({ ...x, barPlaying: false }));
+        return undefined;
+      }
+      barStep(1);
+      return undefined;
     }
 
     function closeBar() {
@@ -1143,6 +1174,9 @@
       barToggle,
       barStep,
       barSelect,
+      barToggleShuffle,
+      barCycleRepeat,
+      barEnd,
       closeBar,
       openPlayer,
       closePlayer,

@@ -47,6 +47,8 @@ function App() {
     barQueue: [],
     barIdx: 0,
     barPlaying: false,
+    barShuffle: false,
+    barRepeat: "all",
     barClosing: false,
     playerOpen: false,
     playerClosing: false,
@@ -929,6 +931,11 @@ function App() {
           )}
           onToggle={() => ctrlRef.current.barToggle()}
           onStep={(d) => ctrlRef.current.barStep(d)}
+          onEnd={() => ctrlRef.current.barEnd()}
+          shuffle={!!state.barShuffle}
+          repeat={state.barRepeat || "all"}
+          onShuffle={() => ctrlRef.current.barToggleShuffle()}
+          onRepeat={() => ctrlRef.current.barCycleRepeat()}
           onToggleLike={(t) => ctrlRef.current.toggleSongLike(t)}
           onClose={() => ctrlRef.current.closeBar()}
           prefsEnabled={!!(state.cookies && state.cookies.preferences)}

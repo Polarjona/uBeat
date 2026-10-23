@@ -1462,6 +1462,12 @@ window.ArtistaViews = (function () {
   const MuteIcon = () => (
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z" /></svg>
   );
+  const ShuffleIcon = () => (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z" /></svg>
+  );
+  const RepeatIcon = () => (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" /></svg>
+  );
 
   // Barra inferior: aparece del centro hacia los lados con imagen,
   // título, controles, volumen y Me gusta. Suena dentro de la app.
@@ -1471,8 +1477,13 @@ window.ArtistaViews = (function () {
     playing,
     closing,
     liked,
+    shuffle,
+    repeat,
     onToggle,
     onStep,
+    onEnd,
+    onShuffle,
+    onRepeat,
     onToggleLike,
     onClose,
     prefsEnabled,
@@ -1486,7 +1497,18 @@ window.ArtistaViews = (function () {
     const [dur, setDur] = useState(0);
     const [vol, setVol] = useState(0.9);
     const [muted, setMuted] = useState(false);
+    const [volOpen, setVolOpen] = useState(false);
     const [open, setOpen] = useState(false);
+
+    // Cierra el popover de volumen al pulsar fuera de él.
+    useEffect(() => {
+      if (!volOpen) return undefined;
+      const fuera = (e) => {
+        if (!e.target.closest || !e.target.closest(".bar-vol-wrap")) setVolOpen(false);
+      };
+      document.addEventListener("pointerdown", fuera);
+      return () => document.removeEventListener("pointerdown", fuera);
+    }, [volOpen]);
 
     // Recuerda el volumen si las preferencias están aceptadas.
     useEffect(() => {
@@ -1540,94 +1562,152 @@ window.ArtistaViews = (function () {
 
     if (!track) return null;
 
+    const repLabel =
+      repeat === "one"
+        ? "Repetir: una canción"
+        : repeat === "off"
+          ? "Repetir: desactivado"
+          : "Repetir: toda la cola";
+
     return (
       <div className={"bottombar" + (open && !closing ? " open" : "")}>
-        <audio
-          ref={audioRef}
-          preload="metadata"
-          onEnded={() => onStep(1)}
-          onError={() => onStep(1)}
-          onLoadedMetadata={(e) => {
-            const a = e.currentTarget;
-            setDur(a.duration || 0);
-            setCurTime(0);
-            setProgress(0);
-          }}
-          onTimeUpdate={(e) => {
-            const a = e.currentTarget;
-            setCurTime(a.currentTime || 0);
-            setProgress(a.duration ? a.currentTime / a.duration : 0);
-          }}
-        />
-        {track.artwork ? <img className="bar-art" src={track.artwork} alt="" /> : null}
-        <div className="bar-info">
-          <strong>{track.track}</strong>
-          <span>{track.artist}</span>
-        </div>
-        <div className="bar-center">
+        <div className="bar-pill">
+          <audio
+            ref={audioRef}
+            preload="metadata"
+            onEnded={() => {
+              const a = audioRef.current;
+              if (onEnd && onEnd() === "replay" && a) {
+                a.currentTime = 0;
+                a.play().catch(() => {});
+              }
+            }}
+            onError={() => onStep(1)}
+            onLoadedMetadata={(e) => {
+              const a = e.currentTarget;
+              setDur(a.duration || 0);
+              setCurTime(0);
+              setProgress(0);
+            }}
+            onTimeUpdate={(e) => {
+              const a = e.currentTarget;
+              setCurTime(a.currentTime || 0);
+              setProgress(a.duration ? a.currentTime / a.duration : 0);
+            }}
+          />
           <div className="player-controls bar-controls">
-            <button type="button" onClick={() => onStep(-1)} aria-label="Anterior">
+            <button
+              type="button"
+              className={"bar-shuf" + (shuffle ? " on" : "")}
+              onClick={onShuffle}
+              aria-label="Aleatorio"
+              aria-pressed={!!shuffle}
+              title="Aleatorio"
+            >
+              <ShuffleIcon />
+            </button>
+            <button type="button" onClick={() => onStep(-1)} aria-label="Anterior" title="Anterior">
               <PrevIcon />
             </button>
             <button type="button" className="play" onClick={onToggle} aria-label={playing ? "Pausar" : "Reproducir"}>
               {playing ? <PauseIcon /> : <PlayIcon />}
             </button>
-            <button type="button" onClick={() => onStep(1)} aria-label="Siguiente">
+            <button type="button" onClick={() => onStep(1)} aria-label="Siguiente" title="Siguiente">
               <NextIcon />
             </button>
-          </div>
-          <div className="bar-seek">
-            <span>{fmtTime(curTime)}</span>
-            <input
-              className="player-seek"
-              type="range"
-              min="0"
-              max="1"
-              step="0.01"
-              value={progress}
-              onChange={(e) => {
-                const a = audioRef.current;
-                if (a && a.duration) a.currentTime = Number(e.target.value) * a.duration;
-              }}
-              aria-label="Progreso"
-            />
-            <span>{fmtTime(dur || 30)}</span>
-          </div>
-        </div>
-        <div className="bar-right">
-          <button
-            type="button"
-            className="icon-btn sm"
-            onClick={() => setMuted((m) => !m)}
-            aria-label={muted ? "Activar sonido" : "Silenciar"}
-          >
-            {muted ? <MuteIcon /> : <VolIcon />}
-          </button>
-          <input
-            className="player-seek vol"
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={muted ? 0 : vol}
-            onChange={(e) => saveVol(Number(e.target.value))}
-            aria-label="Volumen"
-          />
-          <HeartButton liked={liked} onToggle={() => onToggleLike(track)} />
-          {onExpand ? (
             <button
               type="button"
-              className="icon-btn sm"
-              onClick={() => onExpand()}
-              aria-label="Reproductor completo"
-              title="Reproductor completo"
+              className={"bar-rep" + (repeat === "one" ? " uno" : "") + (repeat !== "off" ? " on" : "")}
+              onClick={onRepeat}
+              aria-label={repLabel}
+              title={repLabel}
             >
-              ⬆
+              <RepeatIcon />
             </button>
-          ) : null}
-          <button type="button" className="icon-btn sm" onClick={onClose} aria-label="Cerrar reproductor">
-            ✕
-          </button>
+          </div>
+          <div className="bar-lcd">
+            {track.artwork ? <img className="bar-art" src={track.artwork} alt="" /> : null}
+            <div className="bar-info">
+              <strong>{track.track}</strong>
+              <span>{track.artist}</span>
+            </div>
+            <span className="bar-badge">PREVIEW</span>
+            <div className="bar-times" aria-hidden="true">
+              <span>{fmtTime(curTime)}</span>
+              <span>-{fmtTime(Math.max(0, (dur || 30) - curTime))}</span>
+            </div>
+            <div className="bar-progress">
+              <input
+                className="player-seek"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={progress}
+                style={{
+                  background:
+                    "linear-gradient(to right, var(--text) " +
+                    progress * 100 +
+                    "%, color-mix(in srgb, var(--text) 22%, transparent) " +
+                    progress * 100 +
+                    "%)",
+                }}
+                onChange={(e) => {
+                  const a = audioRef.current;
+                  if (a && a.duration) a.currentTime = Number(e.target.value) * a.duration;
+                }}
+                aria-label="Progreso"
+              />
+            </div>
+          </div>
+          <div className="bar-right">
+            <HeartButton liked={liked} onToggle={() => onToggleLike(track)} />
+            <div className="bar-vol-wrap">
+              <button
+                type="button"
+                className="icon-btn sm"
+                onClick={() => setVolOpen((v) => !v)}
+                aria-label="Volumen"
+                aria-expanded={volOpen}
+                title="Volumen"
+              >
+                {muted ? <MuteIcon /> : <VolIcon />}
+              </button>
+              <div className={"bar-vol-pop" + (volOpen ? " open" : "")}>
+                <input
+                  className="player-seek vol"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={muted ? 0 : vol}
+                  onChange={(e) => saveVol(Number(e.target.value))}
+                  aria-label="Nivel de volumen"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMuted((m) => !m)}
+                  aria-label={muted ? "Activar sonido" : "Silenciar"}
+                >
+                  {muted ? <MuteIcon /> : <VolIcon />}
+                </button>
+              </div>
+            </div>
+            {onExpand ? (
+              <button
+                type="button"
+                className="icon-btn sm"
+                onClick={() => onExpand()}
+                aria-label="Reproductor completo"
+                title="Reproductor completo"
+              >
+                ⬆
+              </button>
+            ) : null}
+            <button type="button" className="icon-btn sm" onClick={onClose} aria-label="Cerrar reproductor" title="Cerrar">
+              ✕
+            </button>
+          </div>
         </div>
       </div>
     );

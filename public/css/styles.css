@@ -1134,6 +1134,7 @@ code {
 .switch:disabled { opacity: 0.55; cursor: default; }
 
 /* ---------- Barra inferior del reproductor ---------- */
+/* ---------- Barra inferior: píldora flotante (estilo Apple Music) ---------- */
 .bottombar {
   position: fixed;
   left: var(--sidebar-w);
@@ -1141,57 +1142,205 @@ code {
   bottom: 0;
   z-index: 75;
   display: flex;
+  justify-content: center;
+  padding: 0 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.bar-pill {
+  pointer-events: auto;
+  display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 18px calc(10px + env(safe-area-inset-bottom, 0px));
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border-top: 1px solid var(--line);
-  box-shadow: 0 -14px 44px rgba(0, 0, 0, 0.45);
-  transform: translateY(110%);
+  width: min(880px, 100%);
+  height: 60px;
+  padding: 0 16px;
+  border-radius: 1000px;
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  backdrop-filter: blur(26px) saturate(1.5);
+  -webkit-backdrop-filter: blur(26px) saturate(1.5);
+  border: 1px solid var(--line);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
+  transform: translateY(120%);
   opacity: 0;
   transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease;
 }
 
-.bottombar::before {
+.bottombar.open .bar-pill { transform: none; opacity: 1; }
+
+/* Transporte a la izquierda, sobrio (el play deja de llevar degradado). */
+.bar-pill .bar-controls { margin-top: 0; gap: 8px; flex-shrink: 0; }
+.bar-pill .bar-controls button {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: none;
+  color: var(--muted);
+}
+.bar-pill .bar-controls button svg { width: 15px; height: 15px; }
+.bar-pill .bar-controls button:hover { color: var(--text); transform: scale(1.08); }
+.bar-pill .bar-controls button.play {
+  width: 40px;
+  height: 40px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border: none;
+  color: var(--text);
+  box-shadow: none;
+}
+.bar-pill .bar-controls button.play svg { width: 17px; height: 17px; }
+.bar-pill .bar-controls button.play:hover { color: var(--text); transform: scale(1.06); }
+.bar-pill .bar-controls button.on { color: var(--accent); }
+.bar-pill .bar-controls .bar-rep { position: relative; }
+.bar-pill .bar-controls .bar-rep.uno::after {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--grad);
-  opacity: 0.65;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
-.bottombar.open { transform: none; opacity: 1; }
+/* LCD: portada + título/artista + badge, con la línea de progreso al pie. */
+.bar-lcd {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  padding: 4px 0 10px;
+}
 
 .bar-art {
-  width: 52px;
-  height: 52px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
   object-fit: cover;
   background: var(--surface-2);
   flex-shrink: 0;
   box-shadow: var(--shadow-1);
 }
 
-.bar-info { min-width: 0; width: 220px; flex-shrink: 0; }
-.bar-info strong { display: block; font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar-info span { color: var(--muted); font-size: 12.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-info { min-width: 0; }
+.bar-info strong { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-info span { color: var(--muted); font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.bar-center { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.bar-badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 6px 2px;
+  line-height: 1;
+}
 
-.bar-controls button { width: 34px; height: 34px; }
-.bar-controls button.play { width: 42px; height: 42px; }
+/* Tiempos a los extremos del LCD: solo al pasar el ratón, como Apple. */
+.bar-times {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.bar-pill:hover .bar-times,
+.bar-pill:focus-within .bar-times { opacity: 1; }
+/* El tiempo izquierdo arranca tras la portada: no se monta sobre ella. */
+.bar-times span:first-child { margin-left: 56px; }
 
-.bar-seek { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 560px; }
-.bar-seek span { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 64px; text-align: center; }
-.bar-seek .player-seek { margin: 0; }
+.bar-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 5px;
+  height: 2px;
+}
+.bar-progress .player-seek {
+  width: 100%;
+  height: 2px;
+  margin: 0;
+  border-radius: 999px;
+}
+.bar-progress .player-seek::-webkit-slider-thumb {
+  width: 10px;
+  height: 10px;
+  border: none;
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.bar-pill:hover .bar-progress .player-seek::-webkit-slider-thumb,
+.bar-progress .player-seek:focus::-webkit-slider-thumb { opacity: 1; }
+.bar-progress .player-seek::-moz-range-track { height: 2px; background: transparent; }
+.bar-progress .player-seek::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: none;
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+}
+.bar-pill:hover .bar-progress .player-seek::-moz-range-thumb { opacity: 1; }
 
-.bar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.bar-right .vol { width: 90px; margin: 0; }
+/* Acciones a la derecha: corazón, volumen (popover), expandir y cerrar. */
+.bar-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.bar-right .icon-btn.sm { color: var(--muted); }
+.bar-right .icon-btn.sm:hover { color: var(--text); }
+
+.bar-vol-wrap { position: relative; display: flex; }
+
+.bar-vol-pop {
+  position: absolute;
+  bottom: calc(100% + 18px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s;
+}
+.bar-vol-pop.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%);
+}
+.bar-vol-pop .vol { width: 92px; margin: 0; }
+.bar-vol-pop button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.bar-vol-pop button svg { width: 16px; height: 16px; fill: currentColor; }
+.bar-vol-pop button:hover { color: var(--text); }
 
 /* ---------- Footer ---------- */
 .footer {
@@ -1354,18 +1503,18 @@ code {
   .footer-inner { grid-template-columns: 1fr; padding: 26px 16px 10px; }
   .footer-bottom { padding: 12px 16px calc(24px + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; }
 
-  /* Barra inferior en móvil (desbordaba 594>389): volumen al sistema y sin
-     seek ni "Anterior" en la barra, como Spotify/Apple; el transporte
-     completo vive en el reproductor abierto. */
-  .bottombar { gap: 10px; padding-left: 12px; padding-right: 12px; }
-  .bar-art { width: 44px; height: 44px; }
-  .bar-info { width: auto; flex: 1 1 auto; }
-  /* Que los controles no se desborden por debajo del min-width:0 de
-     escritorio: con min-width:auto el centro no encoge bajo su contenido
-     (si no, "Siguiente" quedaba tapado por el corazón). */
-  .bar-center { min-width: auto; }
-  .bar-right > :first-child,
-  .bar-right .vol,
-  .bar-seek,
+  /* Barra píldora en móvil: volumen al sistema y solo play/siguiente, como
+     Spotify/Apple; seek, aleatorio y repetir viven en el reproductor abierto. */
+  .bottombar { padding: 0 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .bar-pill { height: 54px; gap: 10px; padding: 0 8px 0 12px; }
+  .bar-art { width: 40px; height: 40px; }
+  .bar-lcd { gap: 10px; padding: 4px 0 6px; }
+  .bar-badge,
+  .bar-times,
+  .bar-progress,
+  .bar-vol-wrap,
   .bar-controls button[aria-label="Anterior"] { display: none; }
+  /* especificidad > .player-controls button (views.css) */
+  .bar-pill .bar-controls .bar-shuf,
+  .bar-pill .bar-controls .bar-rep { display: none; }
 }
