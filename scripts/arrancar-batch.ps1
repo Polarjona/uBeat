@@ -72,4 +72,35 @@ foreach ($w in @("a", "b", "c", "d")) {
     -WindowStyle Hidden
   Write-Output "worker ${w}: lanzado"
 }
+
+# 3) Pasada final por la cola de pendientes. La primera vez se lanzo suelta y
+#    un reinicio del harness la mato a mitad; aqui sobrevive como los workers.
+#    Reanuda sola (lee la salida y el fichero principal) y guarda incremental.
+$pendArchivo = Join-Path $raiz "scripts\preview-pendientes.json"
+$pendLog = Join-Path $logs "pendientes.log"
+$pendFinal = (Test-Path $pendLog) -and ((Get-Content $pendLog -Tail 1 -ErrorAction SilentlyContinue) -like "Siguiente paso*")
+$pendEnMarcha = $existentes | Where-Object { $_.CommandLine -like "*preview-pendientes*" }
+if ($pendEnMarcha) {
+  Write-Output "pendientes: ya corria (PID $($pendEnMarcha.ProcessId))"
+} elseif ($pendFinal -or -not (Test-Path $pendArchivo)) {
+  Write-Output "pendientes: ya completado, no se relanza"
+} else {
+  foreach ($suf in @(".err.log", ".log")) {
+    $viejo = Join-Path $logs "pendientes$suf"
+    if ((Test-Path $viejo) -and (Get-Item $viejo).Length -gt 0) {
+      Move-Item $viejo (Join-Path $logs "pendientes.prev$suf") -Force
+    }
+  }
+  Start-Process -FilePath $python `
+    -ArgumentList @(
+      "-u", "scripts\alinear-previews.py",
+      "--archivo", "scripts\preview-pendientes.json",
+      "--salida", "scripts\pendientes-align.json"
+    ) `
+    -WorkingDirectory $raiz `
+    -RedirectStandardOutput $pendLog `
+    -RedirectStandardError (Join-Path $logs "pendientes.err.log") `
+    -WindowStyle Hidden
+  Write-Output "pendientes: lanzado"
+}
 Write-Output "listo. Logs en $logs"
