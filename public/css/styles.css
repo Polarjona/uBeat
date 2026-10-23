@@ -114,6 +114,17 @@ h1, h2, h3, .section-title, .rail-head h2, .detail-body h2, .hero h1, .modal-hea
   outline-offset: 2px;
 }
 
+/* Quien pida movimiento reducido no debe ver girar el cristal ni transiciones. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 img { color: var(--muted); }
 
 /* ---------- Layout ---------- */
