@@ -620,17 +620,21 @@
   -webkit-backdrop-filter: blur(0);
 }
 
+/* Píldora grande: mismo lenguaje glass que el reproductor (borde, blur,
+   radio generoso). Dos columnas: hero del artista + resto del menú. */
 .detail-panel {
   position: fixed;
   z-index: 96;
-  background: color-mix(in srgb, var(--surface) 97%, transparent);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 24px;
   overflow: hidden;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  gap: 6px;
+  padding: 14px;
   box-shadow: var(--shadow-3);
   transition:
     left 0.38s cubic-bezier(0.22, 0.61, 0.36, 1),
@@ -644,14 +648,45 @@
   min-height: 300px;
 }
 
+/* Columna izquierda: portada vertical con el nombre al pie (scrim). */
+.detail-hero {
+  position: relative;
+  width: 300px;
+  flex-shrink: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
 .detail-img {
   width: 100%;
-  height: 224px;
+  height: 100%;
   object-fit: cover;
-  object-position: center 28%;
+  object-position: center 25%;
   display: block;
-  flex-shrink: 0;
-  background: var(--surface-2);
+}
+
+.detail-hero-scrim {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 48%;
+  background: linear-gradient(to top, rgba(3, 5, 9, 0.82), rgba(3, 5, 9, 0));
+  pointer-events: none;
+}
+
+.detail-name {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 14px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: #fff;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
 }
 
 .detail-top {
@@ -659,22 +694,45 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding-top: 16px;
+  padding-top: 6px;
 }
 
 .detail-close {
-  font-size: 13px;
-  padding: 9px 17px;
-  border-radius: 999px;
-  white-space: nowrap;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 0;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.detail-close:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  transform: scale(1.05);
 }
 
 .detail-body {
-  padding: 0 26px 26px;
+  padding: 0 18px 18px 24px;
   overflow-y: auto;
   flex: 1;
+  min-width: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--scroll) transparent;
+}
+
+/* En pantallas estrechas la ficha se apila: imagen arriba, menú debajo. */
+@media (max-width: 760px) {
+  .detail-panel { flex-direction: column; gap: 0; padding: 12px; }
+  .detail-hero { width: auto; height: 230px; }
+  .detail-body { padding: 4px 6px 18px; }
+  .detail-name { font-size: 22px; }
 }
 
 /* ---------- Crystal Liquid iOS estética ---------- */
@@ -1209,13 +1267,6 @@
   margin: 14px 0 8px;
   position: relative;
   z-index: 2;
-}
-
-.detail-body h2 {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 6px;
 }
 
 .detail-body .meta { display: flex; gap: 26px; margin-bottom: 14px; }
@@ -2528,9 +2579,8 @@
   .chat-wrap.raised { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
   .chat-panel { width: auto; max-height: min(70vh, 520px); align-self: stretch; }
 
-  .detail-img { height: 240px; }
+  .detail-hero { height: 240px; }
   .detail-body { padding: 0 18px calc(90px + env(safe-area-inset-bottom, 0px)); }
-  .detail-body h2 { font-size: 24px; }
 
   .track-list .row-play { padding: 8px 6px; gap: 9px; }
 

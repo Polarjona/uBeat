@@ -784,21 +784,30 @@ window.ArtistaViews = (function () {
           role="dialog"
           aria-label={artist.name}
         >
-          <img
-            className="detail-img"
-            src={img}
-            alt={artist.name}
-            onError={() => setImg(window.ArtistModel.fallbackImg)}
-          />
+          <div className="detail-hero">
+            <img
+              className="detail-img"
+              src={img}
+              alt={artist.name}
+              onError={() => setImg(window.ArtistModel.fallbackImg)}
+            />
+            <span className="detail-hero-scrim" aria-hidden="true" />
+            <h2 className="detail-name">{artist.name}</h2>
+          </div>
           <div className={"detail-body" + (closing ? " closing" : "")}>
             <div className="detail-top">
               <HeartButton liked={liked} onToggle={onToggleLike} />
-              <button className="btn ghost detail-close" type="button" onClick={onClose}>
-                Cerrar ✕
+              <button
+                className="detail-close"
+                type="button"
+                onClick={onClose}
+                aria-label="Cerrar ficha"
+                title="Cerrar"
+              >
+                ✕
               </button>
             </div>
             <p className="detail-eyebrow">Ficha del artista</p>
-            <h2>{artist.name}</h2>
             <div className="meta">
               <span><span className="k">País</span><br /><b>{artist.country}</b></span>
             </div>
